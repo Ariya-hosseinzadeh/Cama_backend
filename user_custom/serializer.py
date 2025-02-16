@@ -1,0 +1,65 @@
+import attrs
+from rest_framework import serializers, status
+from rest_framework.response import Response
+
+from user_custom.models import CustomUser, AdditionalInformationUser, Skills, Employee
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model =CustomUser
+        fields = ['username', 'email', 'password', 'NationalCode']
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True)
+
+class AgainSendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    NationalCode = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        NationalCode = attrs.get('NationalCode')
+        user_custom = CustomUser.objects.filter(NationalCode=NationalCode,email=email).first()
+        if not user_custom:
+            raise serializers.ValidationError('invalid NationalCode')
+        return attrs
+
+class RecoverypaaswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    NationalCode = serializers.CharField(required=True)
+    new_password = serializers.CharField(write_only=True)
+
+    def update(self, instance, validated_data):
+        instance.set_password(validated_data["new_password"])
+        instance.save()
+        return instance
+
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        NationalCode = attrs.get('NationalCode')
+        user_custom = CustomUser.objects.filter(NationalCode=NationalCode, email=email).first()
+        if not user_custom:
+            raise serializers.ValidationError('invalid NationalCode')
+        return attrs
+
+class SignUpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model =CustomUser
+        fields = ['username', 'email', 'password', 'NationalCode']
+class AdditionalInformationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model =AdditionalInformationUser
+        fields ='__all__'
+
+class SkillsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model =Skills
+        fields ='__all__'
+
+class EmployeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model =Employee
+        fields ='__all__'

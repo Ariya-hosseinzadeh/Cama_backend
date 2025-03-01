@@ -35,8 +35,8 @@ class UserSignup(APIView):
                 return Response({'message': 'Email already registered'}, status=status.HTTP_400_BAD_REQUEST)
         if user.is_valid():
             user = User.objects.create_user(username=user.data['username'], email=user.data['email'],
-                                        password=user.data['password'],
-                                        NationalCode=user.data['NationalCode'])
+                                        password=user.data['password']
+                                        )
 
             payload = {
                 'user_id': user.id,
@@ -79,8 +79,8 @@ class SendAgainVerifiedView(APIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             email = serializer.data['email']
-            NationalCode = serializer.data['NationalCode']
-            user= User.objects.get(NationalCode=NationalCode)
+            #NationalCode = serializer.data['NationalCode']
+            user= User.objects.get(email=email)
             payload = {
                 'user_id': user.id,
                 'exp': datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=30),
@@ -109,22 +109,21 @@ class UserLoginView(APIView):
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
-        print(email, password)
-        user = CustomUser.objects.get(email=email)
-        print(user)
-        if user is None or not user.check_password(password):
-            return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if not user.is_verified:
-            return Response({"error": "لطفاً ابتدا ایمیل خود را تأیید کنید."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            user = CustomUser.objects.get(email=email)
+
+            if user is None or not user.check_password(password):
+                return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
+
+            if not user.is_verified:
+                return Response({"error": "لطفاً ابتدا ایمیل خود را تأیید کنید."}, status=status.HTTP_403_FORBIDDEN)
 
         # تولید توکن JWT
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
-        }, status=status.HTTP_200_OK)
-
+            refresh = RefreshToken.for_user(user)
+            return Response({"access": str(refresh.access_token),"refresh": str(refresh),}, status=status.HTTP_200_OK)
+        except CustomUser.DoesNotExist:
+            return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
 class RecoverypasswordView(APIView):
     permission_classes = (AllowAny,)
     serializer_class=AgainSendVerificationSerializer
@@ -132,8 +131,8 @@ class RecoverypasswordView(APIView):
         serializer = self.serializer_class(data=request.data)
         if serializer.is_valid():
             email = serializer.data['email']
-            NationalCode = serializer.data['NationalCode']
-            user= User.objects.get(NationalCode=NationalCode)
+            #NationalCode = serializer.data['NationalCode']
+            user= User.objects.get(email=email)
             payload = {
                 'user_id': user.id,
                 'exp': datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=30),
@@ -159,7 +158,7 @@ class VerifyRecoveryPasswordView(APIView):
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
             user = User.objects.get(id=payload['user_id'])
             if serializer.is_valid():
-                if(serializer.data['NationalCode'] == user.NationalCode):
+                if(serializer.data['email'] == user.email):
                     if user.is_active:
                         serializer = self.serializer_class(user,data=request.data)
                         if serializer.is_valid():

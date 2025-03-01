@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from complaint_ticket.models import *
-from complaint_ticket.views import ComplaintsList
+#from complaint_ticket.views import ComplaintsList
 
 # Register your models here.
-admin.site.register(Complaint)
+#admin.site.register(Complaint)

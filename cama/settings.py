@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'complaint_ticket',
     'Dashboard',
     'chat',
+    'corsheaders',
 ]
 ASGI_APPLICATION = "cama.asgi.application"
 CHANNEL_LAYERS = {
@@ -65,6 +66,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'cama.urls'
@@ -87,6 +89,9 @@ TEMPLATES = [
 ]
 
 # WSGI_APPLICATION = 'cama.wsgi.application'
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+]
 
 
 # Database
@@ -135,6 +140,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 import os
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # یا مسیر دلخواه
 STATIC_URL = '/static/'

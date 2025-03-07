@@ -8,8 +8,9 @@ from classroom.models import *
 admin.site.register(AgreementCourseRequest)
 admin.site.register(AgreementCourseCreate)
 admin.site.register(CourseRequest)
-admin.site.register(ListCourseRequest)
+admin.site.register(CourseCreate)
 admin.site.register(WaitingHall)
 admin.site.register(CourseInvitation)
-admin.site.register(Proposal)
+admin.site.register(ProposalRequestCourse)
+admin.site.register(ProposalCreateCourse)
 

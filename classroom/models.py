@@ -1,12 +1,18 @@
+from django.contrib.contenttypes.fields import GenericRelation, GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from rest_framework.authtoken.admin import User
 
+from Rating.models import Rating, Comment
 from Tags.models import Tag, Category
 from django.utils.text import slugify
 from mptt.models import MPTTModel, TreeForeignKey
 from PIL import Image
 import os
 import uuid
+
+
+
 # Create your models here.
 def generate_unique_link():
     return str(uuid.uuid4())[:18]
@@ -25,7 +31,7 @@ class CourseRequest(models.Model):
     accepted_teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accepted_teacher', null=True,blank=True)#این فیلد بصورت خودکار پر میشود
     created_at=models.DateTimeField(auto_now_add=True)
     is_active=models.BooleanField(default=True)
-    is_private=models.BooleanField(default=False)
+
     def __str__(self):
         return f'{self.Creator} - {self.Title}'
     class Meta:
@@ -37,19 +43,16 @@ class CourseRequest(models.Model):
         super().save(*args, **kwargs)
 # ارور حداکثر تعداد کلاس ها در سریالایزر مدیریت میشود
 class CourseCreate(models.Model):
-    LinkAccess = models.CharField(max_length=18, unique=True, default=str(uuid.uuid4())[:15], blank=False, null=False)
+    LinkAccess = models.CharField(max_length=18,unique=True,default=generate_unique_link,blank=False,null=False)
     Creator = models.ForeignKey(User, on_delete=models.CASCADE,related_name='creator',null=False,blank=False,db_index=True,default=1)
     Title=models.CharField(max_length=200,db_index=True)
     description=models.TextField()
-    #inviteUser=models.ForeignKey(User, on_delete=models.CASCADE,null=True,blank=True)
-    # applicants=models.ManyToManyField(User, related_name='applicants', blank=True)
-    CapacityCourse=models.IntegerField(default=1,)
+    CapacityCourse=models.IntegerField(default=1)
     CountClass = models.IntegerField(default=1)
     SuggestedTime = models.DateTimeField()
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="coursesCreate", db_index=True)
     images=models.ImageField(upload_to="media/courseImages", null=True, blank=True)
     is_active = models.BooleanField(default=True)
-    is_private = models.BooleanField(default=False)
     def save(self, *args, **kwargs):
         """ فشرده‌سازی تصویر هنگام ذخیره """
         super().save(*args, **kwargs)
@@ -61,44 +64,79 @@ class CourseCreate(models.Model):
         img.save(img_path, format="JPEG", quality=70, optimize=True)  # فشرده‌سازی
     def __str__(self):
         return f'{self.Creator} - {self.Title}'
-class GroupCourse(models.Model):#توسط دانشجو انجام میشود و هزینه را میتواند با توافق تایید کنند
-    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teachercourse")
-    course = models.ForeignKey(CourseRequest, on_delete=models.CASCADE)
-    Students=models.ManyToManyField(User, related_name='students',blank=True)
+
 #کلاس هایی که درخواست کننده ایجاد میکند در صورت تایید از تالار انتظار حذف و به اینجا اضافه میشود
 class AgreementCourseRequest(models.Model):
     requestCourse = models.OneToOneField(CourseRequest, on_delete=models.CASCADE, related_name='requestCourse')
-    Time=models.DateTimeField()
+    Time=models.DateTimeField(auto_now_add=True)
     #CourseGroup=models.ForeignKey(GroupCourse, on_delete=models.CASCADE,related_name='course_group',null=True,blank=True)
-    ClassLink=models.CharField(max_length=500)
+    ClassLink=models.CharField(max_length=500,blank=True)
     isHeld=models.BooleanField(default=False)
     #isCompleted=models.BooleanField(default=False)#تعیین میکند تمام جلسات کلاس برگزار شده است
+    average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teacher_invent")
+    students=models.ManyToManyField(User, related_name='students_creator',blank=True)
+    comments = GenericRelation(Comment)
+    Suggested_price=models.FloatField(default=0)
+    def save(self, *args, **kwargs):
+        self.students=self.requestCourse.Creator
+        super().save(*args, **kwargs)
+    def update_average_rating(self):
+        from django.contrib.contenttypes.models import ContentType
+        content_type = ContentType.objects.get_for_model(self)
+        ratings = Rating.objects.filter(content_type=content_type, object_id=self.id)
+        avg = ratings.aggregate(models.Avg('score'))['score__avg']
+        self.average_rating = avg if avg else 0
+        self.save()
+# برای اینکه بررسی کنیم کاربر در کلاس حضور داشته یا نه!مثلا برای نمره دهی استاد باید حتما در کلاس باشد
+    def has_student(self, user):
+        return self.students.filter(id=user.id).exists()
     def __str__(self):
-        return f'{self.request} - {self.ClassLink}'
+        return f'{self.requestCourse} - {self.ClassLink}'
     class Meta:
-        verbose_name_plural = 'Courses'
+        verbose_name_plural = 'Agreement Course Requests'
         ordering = ['-Time']
-
+#بقیه دانش آموزان باید توسط استاد اضافه شوند
 class AgreementCourseCreate(models.Model):
-    createCourse = models.OneToOneField(CourseCreate, on_delete=models.CASCADE, related_name='createCourse')
+    createCourse = models.OneToOneField(CourseCreate, on_delete=models.CASCADE, related_name='teacher_create')
     Time = models.DateTimeField()
     ClassLink = models.CharField(max_length=500)#api از وبینار که گرفتیم پر میشود
-    isHeld = models.BooleanField(default=False)
-
+    is_Held = models.BooleanField(default=False)
+    average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teachercourse")
+    students = models.ManyToManyField(User, related_name='students_attention', blank=True)
+    price=models.FloatField(default=0)
+    def save(self, *args, **kwargs):
+        self.teacher=self.createCourse.Creator
+        super().save(*args, **kwargs)
+    def update_average_rating(self):
+        from django.contrib.contenttypes.models import ContentType
+        content_type = ContentType.objects.get_for_model(self)
+        ratings = Rating.objects.filter(content_type=content_type, object_id=self.id)
+        avg = ratings.aggregate(models.Avg('score'))['score__avg']
+        self.average_rating = avg if avg else 0
+        self.save()
     # isCompleted=models.BooleanField(default=False)#تعیین میکند تمام جلسات کلاس برگزار شده است
+        # برای اینکه بررسی کنیم کاربر در کلاس حضور داشته یا نه!مثلا برای نمره دهی استاد باید حتما در کلاس باشد
+        def has_student(self, user):
+            return self.students.filter(id=user.id).exists()
     def __str__(self):
-        return f'{self.request} - {self.ClassLink}'
+        return f'{self.createCourse} - {self.ClassLink}'
 
     class Meta:
-        verbose_name_plural = 'Courses'
+        verbose_name_plural = 'Agrement Course Create'
         ordering = ['-Time']
 
 
 class WaitingHall(models.Model):
-    ClassRequest=models.OneToOneField(CourseRequest, on_delete=models.CASCADE,related_name='waititent',unique=True,null=False,blank=False)
+    # ClassRequest=models.OneToOneField(CourseRequest, on_delete=models.CASCADE,related_name='waititent',unique=True,null=False,blank=False)
     Title=models.CharField(max_length=200,db_index=True)
     description=models.TextField()
     is_active=models.BooleanField(default=True)
+    created_at=models.DateTimeField(auto_now_add=True)
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)  # مدل مرتبط
+    object_id = models.PositiveIntegerField()  # ID کلاس مرتبط
+    ClassRequest = GenericForeignKey('content_type', 'object_id')  # ارتباط عمومی
     def save(self, *args, **kwargs):
         self.Title=self.ClassRequest.Title
         self.description=self.ClassRequest.description
@@ -109,7 +147,30 @@ class WaitingHall(models.Model):
         return f'{self.ClassRequest.Title}is Attention by{self.ClassRequest.Creator}'
 
 
-class Proposal(models.Model):
+class CourseInvitation(models.Model):
+    course_request = models.ForeignKey(CourseRequest, on_delete=models.CASCADE, related_name="invitations")
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invitations")
+    status = models.CharField(
+        max_length=10,
+        choices=[('pending', 'Pending'), ('accepted', 'Accepted'), ('rejected', 'Rejected')],
+        default='pending'
+    )
+    creator = models.ForeignKey(User, on_delete=models.CASCADE,)
+    created_at = models.DateTimeField(auto_now_add=True)
+    description=models.TextField()
+    response=models.TextField(blank=True)
+    def save(self,*args, **kwargs):
+        """اگر این استاد دعوت را بپذیرد، دیگر دعوت‌ها رد شوند و استاد در کلاس ثبت شود."""
+        creator=self.course_request.Creator
+        if(self.status== 'accepted'):
+            self.course_request.accepted_teacher = self.teacher
+            self.course_request.save()
+            # CourseInvitation.objects.filter(course_request=self.course_request).exclude(id=self.id).update(
+            #     status='rejected')
+        super().save(*args, **kwargs)
+
+#استاد میتواند بر روی یک کرات کلاس در تالار انتظار پیشنهاد دهد کاربر میتواند از کارت کلاس هایی که دارد ببیند بر روی کلاسش چه پیشنهاد هایی هست .اینطوری لازم نیست که کاربر برای اینکه بخواهد مقایسه کند پیشنهاد ها را لیستی از کلاس هارا مقایسه کند .پس ما در پیشنهاد های دانش آموز اینکه یصورت جامع تمام پیشنهاد هایش را یکجا ببیند قرار نخواهیم داد اما برای پیشنهاد دهنده وجود خواهد داشت
+class ProposalRequestCourse(models.Model):
     STATUS_CHOICES = (
         ('pending', 'در حال انتظار '),
         ('accepted', 'پذیرفته شده'),
@@ -124,31 +185,37 @@ class Proposal(models.Model):
     agreement_price=models.BooleanField(default=False)
     status = models.CharField(max_length=300,default='pending',choices=STATUS_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
+    response = models.TextField(blank=True)
+    def save(self, *args, **kwargs):
+        if self.status == 'accepted':
+            ProposalRequestCourse.objects.filter(course=self.course).exclude(id=self.id).update(
+                status='rejected')
+            CourseInvitation.objects.filter(course=self.course).update(
+                status='rejected'
+            )
+        super().save(*args, **kwargs)
+    class Meta:
+        verbose_name_plural = 'Proposals'
+        ordering = ['-created_at']
+class ProposalCreateCourse(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'در حال انتظار '),
+        ('accepted', 'پذیرفته شده'),
+        ('rejected', 'رد شده')
+
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    course=models.ForeignKey(CourseCreate, on_delete=models.CASCADE)
+    message = models.TextField()
+    status = models.CharField(max_length=300,default='pending',choices=STATUS_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    response = models.TextField(blank=True)
     class Meta:
         verbose_name_plural = 'Proposals'
         ordering = ['-created_at']
 
 
-class CourseInvitation(models.Model):
-    course_request = models.ForeignKey(CourseRequest, on_delete=models.CASCADE, related_name="invitations")
-    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invitations")
-    status = models.CharField(
-        max_length=10,
-        choices=[('pending', 'Pending'), ('accepted', 'Accepted'), ('rejected', 'Rejected')],
-        default='pending'
-    )
-    creator = models.ForeignKey(User, on_delete=models.CASCADE,)
-    created_at = models.DateTimeField(auto_now_add=True)
-    description=models.TextField()
-    def save(self,*args, **kwargs):
-        """اگر این استاد دعوت را بپذیرد، دیگر دعوت‌ها رد شوند و استاد در کلاس ثبت شود."""
-        creator=self.course_request.Creator
-        if(self.status== 'accepted'):
-            self.course_request.accepted_teacher = self.teacher
-            self.course_request.save()
-            CourseInvitation.objects.filter(course_request=self.course_request).exclude(id=self.id).update(
-                status='rejected')
-        super().save(*args, **kwargs)
         # تنظیم استاد در کلاس
 
 
@@ -158,7 +225,3 @@ class CourseInvitation(models.Model):
 
 
 
-class ListCourseRequest(models.Model):
-    MyCource=models.ForeignKey(CourseInvitation, on_delete=models.CASCADE,related_name='myclasses')
-    def __str__(self):
-        return f'{self.MyCource},{self.MyCource.status}'

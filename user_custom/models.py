@@ -23,6 +23,7 @@ class CustomUser(AbstractUser):
     is_verified = models.BooleanField(default=False,blank=False,null=False)
     bio = models.TextField(blank=True, null=True)
     profile_picture = models.ImageField(upload_to="instructors/", blank=True, null=True)
+    average_rating = models.FloatField(default=0)  # ذخیره امتیاز
     def is_employee(self):
         return self.role == 'employee'
     def is_admin(self):

@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError
 from PIL import Image
 import os
 
+from twisted.conch.manhole import CTRL_E
 from twisted.mail.scripts.mailmail import senderror
 
 from Dashboard.models import Notification
@@ -40,25 +41,51 @@ class CreateRequestClassSerializer(serializers.ModelSerializer):
         if SuggestedTime < now:
             raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
         return attr
-
-class DetailCourseRequestSerializer(serializers.ModelSerializer):
+class DetailCourseCreateSerializer(serializers.ModelSerializer):
     class Meta:
-        model =CourseRequest
-        exclude = ( 'accepted_teacher',  'is_active')
+        model =CourseCreate
+        exclude = ( 'is_active',)
         extra_kwargs = {
             'Creator':{'read_only':True},
             'CodeCreator':{'read_only':True},
             'username':{'read_only':True},
             'LinkAccess':{'read_only':True},
+            'Title':{'read_only':True},
+            'images':{'read_only':True},
+            'category':{'read_only':True},
         }
 
 
     def validate(self, attr):
         """ بررسی اندازه، فرمت و ابعاد تصویر قبل از ذخیره """
 
-        course=CourseRequest.objects.filter(Title=attr['Title'],description=attr['description'],is_active=True,CountClass=attr['CountClass'],category=attr['category'])
-        if course:
-            raise ValidationError('کلاس شما قبلا ثبت شده است')
+        # course=CourseRequest.objects.filter(Title=attr['Title'],description=attr['description'],is_active=True,CountClass=attr['CountClass'],category=attr['category'])
+
+        SuggestedTime = attr.get('SuggestedTime')
+
+        now = timezone.now()
+        if SuggestedTime < now:
+            raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
+        return attr
+class DetailCourseRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model =CourseRequest
+        exclude = (  'is_active',)
+        extra_kwargs = {
+            'Creator':{'read_only':True},
+            'CodeCreator':{'read_only':True},
+            'username':{'read_only':True},
+            'LinkAccess':{'read_only':True},
+            'Title':{'read_only':True},
+            'category':{'read_only':True},
+            'accepted_teacher':{'read_only':True},
+        }
+
+
+    def validate(self, attr):
+        """ بررسی اندازه، فرمت و ابعاد تصویر قبل از ذخیره """
+
+        # course=CourseRequest.objects.filter(Title=attr['Title'],description=attr['description'],is_active=True,CountClass=attr['CountClass'],category=attr['category'])
 
         SuggestedTime = attr.get('SuggestedTime')
 
@@ -251,45 +278,45 @@ class propsalResponse(serializers.ModelSerializer):
 class CreateCourseSerializer(serializers.ModelSerializer):
     class Meta:
         model=CourseCreate
-        exclude = ('LinkAccess',)
+        fields='__all__'
         extra_kwargs = {
-            'Creator':{'read_only':True},
+            'Creator':{'write_only': True},
             'is_active':{'read_only':True},
+            'CodeCreator':{'read_only':True},
+            'username':{'read_only':True},
+            'LinkAccess':{'read_only':True},
         }
-        def validate(self, attr):
-            """ بررسی اندازه، فرمت و ابعاد تصویر قبل از ذخیره """
-            images=attr.get('images')
-            max_size = 5 * 1024 * 1024  # 5MB
-            if images.size > max_size:
-                raise ValidationError("حجم تصویر نباید بیشتر از ۵ مگابایت باشد.")
+    def validate(self, attr):
 
-            # بررسی فرمت تصویر
-            allowed_extensions = ["jpg", "jpeg", "png"]
-            ext = os.path.splitext(images.name)[1][1:].lower()
-            if ext not in allowed_extensions:
-                raise ValidationError("فرمت تصویر باید JPEG یا PNG باشد.")
-
+        images=attr.get('images')
+        max_size = 5 * 1024 * 1024  # 5MB
+        if images.size > max_size:
+            raise ValidationError("حجم تصویر نباید بیشتر از ۵ مگابایت باشد.")
+        print("request.user")
+        # بررسی فرمت تصویر
+        allowed_extensions = ["jpg", "jpeg", "png"]
+        ext = os.path.splitext(images.name)[1][1:].lower()
+        if ext not in allowed_extensions:
+            raise ValidationError("فرمت تصویر باید JPEG یا PNG باشد.")
             # بررسی ابعاد تصویر
-            img = Image.open(images)
-            min_width, min_height = 300, 300
-            if img.width < min_width or img.height < min_height:
-                raise ValidationError(f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد.")
-
-            course = CourseCreate.objects.filter(Title=attr['Title'], description=attr['description'], is_active=True,
-                                                  CountClass=attr['CountClass'], category=attr['category'])
-            if course:
-                raise ValidationError('کلاس شما قبلا ثبت شده است')
-
-            SuggestedTime = attr.get('SuggestedTime')
-
-            now = timezone.now()
-            if SuggestedTime < now:
-                raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
-
-        # def create(self, validated_attr):
-        #     request=self.context.get('requests')
-        #     validated_attr['user'] = request.user
-        #     return super().create(validated_attr)
+        img = Image.open(images)
+        min_width, min_height = 300, 300
+        if img.width < min_width or img.height < min_height:
+            raise ValidationError(f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد.")
+        user=self.context.get('request').user
+        course = CourseCreate.objects.filter(Creator=user,Title=attr['Title'], description=attr['description'], is_active=True, category=attr['category'])
+        if course:
+            raise ValidationError('کلاس شما قبلا ثبت شده است')
+        SuggestedTime = attr.get('SuggestedTime')
+        now = timezone.now()
+        if SuggestedTime < now:
+            raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
+        return attr
+    def create(self, validated_attr):
+        request=self.context.get('request')
+        validated_attr['Creator'] = request.user
+        print(validated_attr['Creator'])
+        return super().create(validated_attr)
 
 class CourseSerializer(serializers.ModelSerializer):
     class Meta:

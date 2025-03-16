@@ -119,10 +119,57 @@ class HallWaiting(mixins.ListModelMixin,generics.GenericAPIView):
     def get(self, request):
         return self.list(request)
 # کلاس های ایجاد شده را میتاون دید و مدیریت کرد
-class DetailRequest(generics.RetrieveAPIView,generics.UpdateAPIView,generics.DestroyAPIView):
+# class DetailRequest(APIView):
+#     permission_classes = (AllowAny,)
+#     serializer_class=DetailCourseCreateSerializer
+#     def get(self,request,id,pk):
+#
+#         if(id==30):
+#             query_set = CourseRequest.objects.filter(id=id)
+#             serializers=DetailCourseCreateSerializer(query_set,many=True)
+#             return Response(serializers.data)
+#         elif(id==12):
+#             query_set = CourseRequest.objects.filter(id=pk)
+#             serializers=DetailCourseRequestSerializer(query_set,many=True)
+#             return Response(serializers.data)
+#         else:
+#             return Response({'status': 'error in type'},status=status.HTTP_400_BAD_REQUEST)
+#     def put(self,request,id,pk):
+#
+#         if(id==30):
+#             query_set=CreateCourse.objects.filter(id=pk)
+#             serializers=DetailCourseCreateSerializer(query_set,request.data)
+#             if serializers.is_valid():
+#                 serializers.save()
+#                 return Response(serializers.data,status=status.HTTP_200_OK)
+#             return Response(serializers.errors,status=status.HTTP_400_BAD_REQUEST)
+#         elif(id==12):
+#             query_set=CourseRequest.objects.filter(id=pk)
+#             serializers=DetailCourseRequestSerializer(query_set,request.data)
+#             if serializers.is_valid():
+#                 serializers.save()
+#                 return Response(serializers.data,status=status.HTTP_200_OK)
+#             return Response(serializers.errors, status=status.HTTP_400_BAD_REQUEST)
+#         else:
+#             return Response({'status': 'error in type'},status=status.HTTP_400_BAD_REQUEST)
+#
+#     def delete(self,request,id,pk):
+#         query_set=WaitingHall.objects.filter(object_id=pk,content_type=id)
+#         if(id==30):
+#             query_set.delete()
+#             CreateRequestCourse.objects.filter(id=pk).delete()
+#             return Response(status=status.HTTP_200_OK)
+#         elif(id==12):
+#             query_set.delete()
+#             CourseRequest.objects.filter(id=id).delete()
+#             return Response(status=status.HTTP_200_OK)
+#         else:
+#             return Response({'status': 'error in type'},status=status.HTTP_400_BAD_REQUEST)
+
+class detailRequestCourse(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (AllowAny,)
-    queryset = CourseRequest.objects
     serializer_class = DetailCourseRequestSerializer
+    queryset = CourseRequest.objects.all()
 #responseبرای پیشنهاد دهنده و گیرنده حتما مدیریت شود
 class CreateProposalCourseRequest(APIView):
     permission_classes = (AllowAny,)
@@ -270,19 +317,20 @@ class MySuggest(APIView):
 
 
 class CreateCourse(APIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
     serializer_class = CreateCourseSerializer
-    def get(self,request):
-        datacourse=CourseCreate.objects.all()
-        serializer=self.serializer_class(datacourse,many=True)
-        return Response(serializer.data,status=status.HTTP_200_OK)
+    # def get(self,request):
+    #     datacourse=CourseCreate.objects.filter(Creator=request.user)
+    #
+    #     serializer=self.serializer_class(datacourse,many=True)
+    #     return Response(serializer.data,status=status.HTTP_200_OK)
     def post(self,request):
         serializer=self.serializer_class(data=request.data,context={'request': request})
         if serializer.is_valid():
             serializer.save()
             course = CourseCreate.objects.get(id=serializer.data['id'])
-            Addclass = WaitingHall.objects.create(ClassRequest=course)
-            Addclass.save()
+            AddCourse = WaitingHall.objects.create(ClassRequest=course)
+            AddCourse.save()
             return Response(
                 {'status': 'کلاس شما به تالار انتظار با موفقیت اضافه شد،لطفا برای یافتن استاد/دانشجو منتظر بمانید'},
                 status=status.HTTP_200_OK)
@@ -294,16 +342,7 @@ class CreateCourse(APIView):
 class detailCreateCourse(generics.RetrieveAPIView,generics.UpdateAPIView,generics.DestroyAPIView):
     permission_classes = (AllowAny,)
     queryset = CourseCreate.objects
-    serializer_class = DetailCourseRequestSerializer
-
-
-
-
-
-
-
-
-
+    serializer_class = DetailCourseCreateSerializer
 
 
 # class ProposersRequest(APIView):

@@ -31,7 +31,7 @@ class CourseRequest(models.Model):
     accepted_teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name='accepted_teacher', null=True,blank=True)#این فیلد بصورت خودکار پر میشود
     created_at=models.DateTimeField(auto_now_add=True)
     is_active=models.BooleanField(default=True)
-
+    price_course = models.FloatField(null=True,blank=True)
     def __str__(self):
         return f'{self.Creator} - {self.Title}'
     class Meta:
@@ -45,6 +45,8 @@ class CourseRequest(models.Model):
 class CourseCreate(models.Model):
     LinkAccess = models.CharField(max_length=18,unique=True,default=generate_unique_link,blank=False,null=False)
     Creator = models.ForeignKey(User, on_delete=models.CASCADE,related_name='creator',null=False,blank=False,db_index=True,default=1)
+    username = models.CharField(max_length=18, null=False, blank=False)
+    CodeCreator = models.CharField(max_length=18, null=False, blank=False)
     Title=models.CharField(max_length=200,db_index=True)
     description=models.TextField()
     CapacityCourse=models.IntegerField(default=1)
@@ -53,6 +55,7 @@ class CourseCreate(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="coursesCreate", db_index=True)
     images=models.ImageField(upload_to="media/courseImages", null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    price_course = models.FloatField(null=True,blank=True)
     def save(self, *args, **kwargs):
         """ فشرده‌سازی تصویر هنگام ذخیره """
         super().save(*args, **kwargs)
@@ -61,7 +64,10 @@ class CourseCreate(models.Model):
 
         # کاهش کیفیت تصویر بدون افت محسوس
         img = img.convert("RGB")  # اگر فرمت PNG باشد، به RGB تبدیل شود
+        self.username = self.Creator.username
+        self.CodeCreator = self.Creator.codeUser
         img.save(img_path, format="JPEG", quality=70, optimize=True)  # فشرده‌سازی
+
     def __str__(self):
         return f'{self.Creator} - {self.Title}'
 
@@ -70,14 +76,13 @@ class AgreementCourseRequest(models.Model):
     requestCourse = models.OneToOneField(CourseRequest, on_delete=models.CASCADE, related_name='requestCourse')
     Time=models.DateTimeField(auto_now_add=True)
     #CourseGroup=models.ForeignKey(GroupCourse, on_delete=models.CASCADE,related_name='course_group',null=True,blank=True)
-    ClassLink=models.CharField(max_length=500,blank=True)
+    ClassLink=models.CharField(max_length=500)
     isHeld=models.BooleanField(default=False)
     #isCompleted=models.BooleanField(default=False)#تعیین میکند تمام جلسات کلاس برگزار شده است
     average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teacher_invent")
     students=models.ManyToManyField(User, related_name='students_creator',blank=True)
     comments = GenericRelation(Comment)
-    Suggested_price=models.FloatField(default=0)
     def save(self, *args, **kwargs):
         self.students=self.requestCourse.Creator
         super().save(*args, **kwargs)
@@ -105,7 +110,9 @@ class AgreementCourseCreate(models.Model):
     average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teachercourse")
     students = models.ManyToManyField(User, related_name='students_attention', blank=True)
-    price=models.FloatField(default=0)
+    comments = GenericRelation(Comment)
+
+
     def save(self, *args, **kwargs):
         self.teacher=self.createCourse.Creator
         super().save(*args, **kwargs)
@@ -137,9 +144,13 @@ class WaitingHall(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)  # مدل مرتبط
     object_id = models.PositiveIntegerField()  # ID کلاس مرتبط
     ClassRequest = GenericForeignKey('content_type', 'object_id')  # ارتباط عمومی
+    Creator=models.ForeignKey(User, on_delete=models.CASCADE, related_name="Creator")
+    price=models.FloatField(default=0,null=True,blank=True)
     def save(self, *args, **kwargs):
         self.Title=self.ClassRequest.Title
         self.description=self.ClassRequest.description
+        self.price=self.ClassRequest.price_course
+        self.Creator=self.ClassRequest.Creator
         super().save(*args, **kwargs)
 
 

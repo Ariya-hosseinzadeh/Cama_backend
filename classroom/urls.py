@@ -6,7 +6,8 @@ from .  import views
 urlpatterns = [
     path('request-course/', views.CreateRequestCourse.as_view(), name='rquest-course'),
     path('hall-waiting/',views.HallWaiting.as_view(), name='add-to-hall-waiting'),
-    path('detail-request/<int:pk>',views.DetailRequest.as_view(), name='deatal-request'),
+    path('detail-course-create/<int:pk>',views.detailCreateCourse.as_view(), name='deatal-request'),
+    path('detail-course-request/<int:pk>/', views.detailRequestCourse.as_view(), name='deatal-detail'),
     path('invent-teacher/<int:id>',views.InventationTecher.as_view(),name='inventaion-teacher'),
     path('proposers-request/<int:id>/', views.CreateProposalCourseRequest.as_view(), name='proposers-request'),
     path('my-suggest/<int:id>',views.MySuggest.as_view(), name='my-suggest'),

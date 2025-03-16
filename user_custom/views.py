@@ -1,4 +1,5 @@
 from gc import get_objects
+from http.client import responses
 
 from django.core.serializers import get_serializer
 from django.shortcuts import render
@@ -98,8 +99,25 @@ class SendAgainVerifiedView(APIView):
             return Response({'message': 'ایمیل تایید ارسال شد . لطفا ایمیل خود را چک کنید'},
                             status=status.HTTP_201_CREATED)
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.exceptions import AuthenticationFailed
 
 
+
+class UserCurrentView(APIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = UserSerializer
+
+    def get(self,request):
+        user = request.user
+        return Response({
+            "id": user.id,
+            "codeUser": user.codeUser,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name
+        })
 
 
 class UserLoginView(APIView):
@@ -120,10 +138,42 @@ class UserLoginView(APIView):
                 return Response({"error": "لطفاً ابتدا ایمیل خود را تأیید کنید."}, status=status.HTTP_403_FORBIDDEN)
 
         # تولید توکن JWT
+        # توکن ایجاد شده است که در کوکی ذخیره کردیم البته ما در خود کاما هم یک بخش برای ایجاد توکن دسترسی و توکن رفرش ایجاد کردیم اما چون خواستیم شخصی سازی کنیم اینجا داریم
             refresh = RefreshToken.for_user(user)
-            return Response({"access": str(refresh.access_token),"refresh": str(refresh),}, status=status.HTTP_200_OK)
+            access_token = str(refresh.access_token)
+            refresh_token = str(refresh)
+            response= Response({"access": str(refresh.access_token),"refresh": str(refresh),"user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name
+                }}, status=status.HTTP_200_OK)
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,  # جلوگیری از دسترسی جاوااسکریپت
+                secure=True,  # فقط در HTTPS
+                #samesite='Lax',  # محافظت در برابر CSRF
+                samesite='None',#در محیط توسعه این مورد را تست کنید، اما در محیط تولید (production)، samesite='Lax' بهتر است.
+                max_age=datetime.timedelta(minutes=5)  # مدت اعتبار کوکی
+            )
+            response.set_cookie(
+                key='refresh_token',
+                value=refresh_token,
+                httponly=True,
+                secure=True,
+                # samesite='Lax', در حال توسعه
+                samesite='None',  # اجازه ارسال در درخواست‌های Cross-Site
+                max_age=datetime.timedelta(days=7)  # مدت اعتبار کوکی
+            )
+
+            return response
         except CustomUser.DoesNotExist:
             return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+            return Response({"error": f"مشکلی رخ داده: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class RecoverypasswordView(APIView):
     permission_classes = (AllowAny,)
     serializer_class=AgainSendVerificationSerializer
@@ -194,3 +244,26 @@ class EmployeeDashboardView(APIView):
     def get(self, request):
         return Response({"message": "Welcome to Employee Dashboard"})
 
+
+#token refresh by coki
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+class CustomTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        # گرفتن توکن رفرش از کوکی‌ها
+        refresh_token = request.COOKIES.get('refresh_token')
+
+        if not refresh_token:
+            return Response({"error": "Refresh token is missing from cookies."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # بررسی صحت توکن رفرش
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+
+            # ارسال توکن دسترسی جدید به کاربر
+            response = Response({"access": access_token}, status=status.HTTP_200_OK)
+
+            return response
+        except Exception as e:
+            return Response({"error": f"Invalid refresh token: {str(e)}"}, status=status.HTTP_401_UNAUTHORIZED)

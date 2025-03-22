@@ -39,7 +39,7 @@ path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('chat/',include('chat.urls')),
     path('complaint/',include('complaint_ticket.urls')),
-    path('api/logout/',TokenBlacklistView.as_view(),name='logout'),
+    # path('api/logout/',TokenBlacklistView.as_view(),name='logout'),
 
 ]
 #python manage.py runserver_plus --cert-file cert.pem --key-file key.pem

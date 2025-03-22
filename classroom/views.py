@@ -46,7 +46,7 @@ class myInventationRecive(generics.GenericAPIView,mixins.ListModelMixin):
         return self.list(request)
 
 class myInventationSend(generics.GenericAPIView,mixins.ListModelMixin):
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
     queryset=CourseInvitation.objects.filter(creator=1)#change user
     serializer_class = InventiationTeacherSerializer
     def get(self, request:Request):
@@ -331,6 +331,7 @@ class CreateCourse(APIView):
             course = CourseCreate.objects.get(id=serializer.data['id'])
             AddCourse = WaitingHall.objects.create(ClassRequest=course)
             AddCourse.save()
+
             return Response(
                 {'status': 'کلاس شما به تالار انتظار با موفقیت اضافه شد،لطفا برای یافتن استاد/دانشجو منتظر بمانید'},
                 status=status.HTTP_200_OK)

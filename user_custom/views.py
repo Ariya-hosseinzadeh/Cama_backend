@@ -1,5 +1,6 @@
 from gc import get_objects
 from http.client import responses
+from http.cookiejar import Cookie
 
 from django.core.serializers import get_serializer
 from django.shortcuts import render
@@ -9,13 +10,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 from . import permissions
 from .models import CustomUser
 from .permissions import IsAdminUser, IsEmployeeUser
 from .serializer import UserSerializer, EmployeeSerializer, LoginSerializer, AgainSendVerificationSerializer, \
     RecoverypaaswordSerializer
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from django.urls import reverse
 import jwt
 import datetime
@@ -136,44 +138,71 @@ class UserLoginView(APIView):
 
             if not user.is_verified:
                 return Response({"error": "لطفاً ابتدا ایمیل خود را تأیید کنید."}, status=status.HTTP_403_FORBIDDEN)
-
+            if(user):
         # تولید توکن JWT
         # توکن ایجاد شده است که در کوکی ذخیره کردیم البته ما در خود کاما هم یک بخش برای ایجاد توکن دسترسی و توکن رفرش ایجاد کردیم اما چون خواستیم شخصی سازی کنیم اینجا داریم
-            refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
-            refresh_token = str(refresh)
-            response= Response({"access": str(refresh.access_token),"refresh": str(refresh),"user": {
+                refresh = RefreshToken.for_user(user)
+                print(refresh.access_token)
+                print(refresh)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+                response= Response({"access": str(refresh.access_token),"refresh": str(refresh),"user": {
                     "id": user.id,
                     "username": user.username,
                     "email": user.email,
                     "first_name": user.first_name,
                     "last_name": user.last_name
                 }}, status=status.HTTP_200_OK)
-            response.set_cookie(
+                response.set_cookie(
                 key='access_token',
                 value=access_token,
                 httponly=True,  # جلوگیری از دسترسی جاوااسکریپت
                 secure=True,  # فقط در HTTPS
-                #samesite='Lax',  # محافظت در برابر CSRF
+                # samesite='Lax',  # محافظت در برابر CSRF
                 samesite='None',#در محیط توسعه این مورد را تست کنید، اما در محیط تولید (production)، samesite='Lax' بهتر است.
                 max_age=datetime.timedelta(minutes=5)  # مدت اعتبار کوکی
             )
-            response.set_cookie(
+                response.set_cookie(
                 key='refresh_token',
                 value=refresh_token,
                 httponly=True,
                 secure=True,
-                # samesite='Lax', در حال توسعه
+                # samesite='Lax',
                 samesite='None',  # اجازه ارسال در درخواست‌های Cross-Site
                 max_age=datetime.timedelta(days=7)  # مدت اعتبار کوکی
             )
+                print(response.cookies)
+                return response
+        except CustomUser.DoesNotExist:
+                return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
+        except Exception as e:
+                return Response({"error": f"مشکلی رخ داده: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+class UserLogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # response = Response({"message": "Successfully logged out"}, status=200)
+            # response.delete_cookie("access_token")
+            # response.delete_cookie("refresh_token")
+            # return response
+            # دریافت توکن از کوکی‌ها
+            refresh_token = request.COOKIES.get("refresh_token")
+
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()  # بی‌اعتبار کردن توکن
+                is_blacklisted = BlacklistedToken.objects.filter(token=token).exists()
+                print(f"Blacklist status: {is_blacklisted}")  # این را در لاگ سرور ببین
+            response = Response({"message": "Logged out successfully"}, status=status.HTTP_200_OK)
+
+            # حذف کوکی‌ها با مقدار خالی و تاریخ انقضای گذشته
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
 
             return response
-        except CustomUser.DoesNotExist:
-            return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
-            return Response({"error": f"مشکلی رخ داده: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
 class RecoverypasswordView(APIView):
     permission_classes = (AllowAny,)
     serializer_class=AgainSendVerificationSerializer
@@ -252,7 +281,7 @@ class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
         # گرفتن توکن رفرش از کوکی‌ها
         refresh_token = request.COOKIES.get('refresh_token')
-
+        print('refresh_token', refresh_token,'انجام شد رفرش توکن ')
         if not refresh_token:
             return Response({"error": "Refresh token is missing from cookies."}, status=status.HTTP_400_BAD_REQUEST)
 

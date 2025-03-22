@@ -11,6 +11,7 @@ from PIL import Image
 import os
 import uuid
 
+from user_custom.models import CustomUser
 
 
 # Create your models here.
@@ -19,7 +20,7 @@ def generate_unique_link():
 
 class CourseRequest(models.Model):
     LinkAccess=models.CharField(max_length=18,unique=True,default=generate_unique_link,blank=False,null=False)#لینک یکتا برای دسترسی به هر کلاس
-    Creator = models.ForeignKey(User, on_delete=models.CASCADE,related_name='requester',null=False,db_index=True,default=1)
+    Creator = models.ForeignKey(CustomUser, on_delete=models.CASCADE,related_name='requester',null=False,db_index=True,default=1)
     username=models.CharField(max_length=18,null=False,blank=False)
     CodeCreator=models.CharField(max_length=18,null=False,blank=False)
     Title=models.CharField(max_length=200,db_index=True)
@@ -32,19 +33,31 @@ class CourseRequest(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     is_active=models.BooleanField(default=True)
     price_course = models.FloatField(null=True,blank=True)
+    images=models.ImageField(null=True,blank=True)
+    level_course = models.IntegerField(default=1, choices=[(1, 'elementary'), (3, 'intermediate'), (5, 'advanced')])
     def __str__(self):
         return f'{self.Creator} - {self.Title}'
     class Meta:
         verbose_name_plural = 'Class Requests'
         ordering = ['-SuggestedTime']
+
     def save(self, *args, **kwargs):
+        """ فشرده‌سازی تصویر هنگام ذخیره """
         self.username = self.Creator.username
         self.CodeCreator = self.Creator.codeUser
         super().save(*args, **kwargs)
+        img_path = self.images.path
+        img = Image.open(img_path)
+        # کاهش کیفیت تصویر بدون افت محسوس
+        img = img.convert("RGB")  # اگر فرمت PNG باشد، به RGB تبدیل شود
+
+        img.save(img_path, format="JPEG", quality=70, optimize=True)  # فشرده‌سازی
+
+
 # ارور حداکثر تعداد کلاس ها در سریالایزر مدیریت میشود
 class CourseCreate(models.Model):
     LinkAccess = models.CharField(max_length=18,unique=True,default=generate_unique_link,blank=False,null=False)
-    Creator = models.ForeignKey(User, on_delete=models.CASCADE,related_name='creator',null=False,blank=False,db_index=True,default=1)
+    Creator = models.ForeignKey(CustomUser, on_delete=models.CASCADE,related_name='creator',null=False,blank=False,db_index=True,default=1)
     username = models.CharField(max_length=18, null=False, blank=False)
     CodeCreator = models.CharField(max_length=18, null=False, blank=False)
     Title=models.CharField(max_length=200,db_index=True)
@@ -56,16 +69,19 @@ class CourseCreate(models.Model):
     images=models.ImageField(upload_to="media/courseImages", null=True, blank=True)
     is_active = models.BooleanField(default=True)
     price_course = models.FloatField(null=True,blank=True)
+    level_course = models.IntegerField(default=1, choices=[(1, 'elementary'), (3, 'intermediate'), (5, 'advanced')])
+    enrolled_students=models.ManyToManyField(CustomUser,related_name='enrolled_students',blank=True,null=True)
+    teacher_rating = models.FloatField(default=0)
     def save(self, *args, **kwargs):
         """ فشرده‌سازی تصویر هنگام ذخیره """
+        self.username = self.Creator.username
+        self.CodeCreator = self.Creator.codeUser
         super().save(*args, **kwargs)
         img_path = self.images.path
         img = Image.open(img_path)
-
         # کاهش کیفیت تصویر بدون افت محسوس
         img = img.convert("RGB")  # اگر فرمت PNG باشد، به RGB تبدیل شود
-        self.username = self.Creator.username
-        self.CodeCreator = self.Creator.codeUser
+
         img.save(img_path, format="JPEG", quality=70, optimize=True)  # فشرده‌سازی
 
     def __str__(self):
@@ -81,10 +97,11 @@ class AgreementCourseRequest(models.Model):
     #isCompleted=models.BooleanField(default=False)#تعیین میکند تمام جلسات کلاس برگزار شده است
     average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teacher_invent")
-    students=models.ManyToManyField(User, related_name='students_creator',blank=True)
+    Creator=models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="creator_classRequest")
     comments = GenericRelation(Comment)
+
     def save(self, *args, **kwargs):
-        self.students=self.requestCourse.Creator
+        self.enrolled_students=self.requestCourse.Creator
         super().save(*args, **kwargs)
     def update_average_rating(self):
         from django.contrib.contenttypes.models import ContentType
@@ -137,6 +154,7 @@ class AgreementCourseCreate(models.Model):
 
 class WaitingHall(models.Model):
     # ClassRequest=models.OneToOneField(CourseRequest, on_delete=models.CASCADE,related_name='waititent',unique=True,null=False,blank=False)
+    type_course =models.CharField(max_length=500)
     Title=models.CharField(max_length=200,db_index=True)
     description=models.TextField()
     is_active=models.BooleanField(default=True)
@@ -146,11 +164,17 @@ class WaitingHall(models.Model):
     ClassRequest = GenericForeignKey('content_type', 'object_id')  # ارتباط عمومی
     Creator=models.ForeignKey(User, on_delete=models.CASCADE, related_name="Creator")
     price=models.FloatField(default=0,null=True,blank=True)
+    image=models.ImageField(upload_to="media/waitingHallImages", null=True, blank=True)
+    CodeCreator=models.CharField(max_length=18,null=False,blank=False)
+
     def save(self, *args, **kwargs):
         self.Title=self.ClassRequest.Title
         self.description=self.ClassRequest.description
         self.price=self.ClassRequest.price_course
         self.Creator=self.ClassRequest.Creator
+        self.CodeCreator=self.ClassRequest.CodeCreator
+        self.image=self.ClassRequest.images
+        self.type_course=self.content_type.model
         super().save(*args, **kwargs)
 
 

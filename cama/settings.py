@@ -51,9 +51,10 @@ INSTALLED_APPS = [
     'Dashboard',
     'chat',
     'django_extensions',
-    'rest_framework_simplejwt.token_blacklist',
+
 
 ]
+# 'rest_framework_simplejwt.token_blacklist', در اینستال اپ برای استفاده از لاگ اوت دیفالت
 ASGI_APPLICATION = "cama.asgi.application"
 CHANNEL_LAYERS = {
     "default": {
@@ -97,7 +98,10 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
-
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 AUTH_USER_MODEL = 'user_custom.CustomUser'

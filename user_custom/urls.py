@@ -1,5 +1,5 @@
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenRefreshView
+
 
 from Rating import admin
 from .  import views
@@ -16,7 +16,8 @@ path('admin-dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
     path('send-again/',views.SendAgainVerifiedView.as_view(), name='send-again'),
     path('recovery-password/', views.RecoverypasswordView.as_view(), name='recovery-password'),
     path('verify-password/<str:token>/', views.VerifyRecoveryPasswordView.as_view(), name='verify-password'),
-path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
     path('user-current/', views.UserCurrentView.as_view(), name='user_current'),
     path('refresh-token/',views.CustomTokenRefreshView.as_view(), name='token_refresh' ),
+    path('coustom-log-out/', views.UserLogoutView.as_view(), name='custom-logout'),
 ]

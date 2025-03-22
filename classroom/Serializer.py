@@ -33,13 +33,16 @@ class CreateRequestClassSerializer(serializers.ModelSerializer):
 
         course=CourseRequest.objects.filter(Title=attr['Title'],description=attr['description'],is_active=True,CountClass=attr['CountClass'],category=attr['category'])
         if course:
-            raise ValidationError('کلاس شما قبلا ثبت شده است')
+            raise ValidationError({'Repetition':'کلاس شما قبلا ثبت شده است'})
 
         SuggestedTime = attr.get('SuggestedTime')
 
         now = timezone.now()
         if SuggestedTime < now:
-            raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
+            raise ValidationError({'SuggestedTime':f"زمان نمیتواند از زمان اکنون کمتر باشد"})
+        category = attr['category']
+        if category is None or category not in Category.objects.all():
+            raise ValidationError({'category':'خطا در دسته بندی لطفا دسته بندی را درست وارد کنید '})
         return attr
 class DetailCourseCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -285,32 +288,36 @@ class CreateCourseSerializer(serializers.ModelSerializer):
             'CodeCreator':{'read_only':True},
             'username':{'read_only':True},
             'LinkAccess':{'read_only':True},
+
         }
     def validate(self, attr):
 
         images=attr.get('images')
         max_size = 5 * 1024 * 1024  # 5MB
         if images.size > max_size:
-            raise ValidationError("حجم تصویر نباید بیشتر از ۵ مگابایت باشد.")
-        print("request.user")
+            raise ValidationError({'images':"حجم تصویر نباید بیشتر از ۵ مگابایت باشد."})
+
         # بررسی فرمت تصویر
         allowed_extensions = ["jpg", "jpeg", "png"]
         ext = os.path.splitext(images.name)[1][1:].lower()
         if ext not in allowed_extensions:
-            raise ValidationError("فرمت تصویر باید JPEG یا PNG باشد.")
+            raise ValidationError({'images':"فرمت تصویر باید JPEG یا PNG باشد."})
             # بررسی ابعاد تصویر
         img = Image.open(images)
         min_width, min_height = 300, 300
         if img.width < min_width or img.height < min_height:
-            raise ValidationError(f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد.")
+            raise ValidationError({'images':f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد."})
         user=self.context.get('request').user
         course = CourseCreate.objects.filter(Creator=user,Title=attr['Title'], description=attr['description'], is_active=True, category=attr['category'])
         if course:
-            raise ValidationError('کلاس شما قبلا ثبت شده است')
+            raise ValidationError({'Repetition':'کلاس شما قبلا ثبت شده است'})
         SuggestedTime = attr.get('SuggestedTime')
         now = timezone.now()
         if SuggestedTime < now:
-            raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
+            raise ValidationError({'SuggestedTime':f"زمان نمیتواند از زمان اکنون کمتر باشد"})
+        category = attr['category']
+        if category is None or category not in Category.objects.all():
+            raise ValidationError({'category': 'خطا در دسته بندی لطفا دسته بندی را درست وارد کنید '})
         return attr
     def create(self, validated_attr):
         request=self.context.get('request')

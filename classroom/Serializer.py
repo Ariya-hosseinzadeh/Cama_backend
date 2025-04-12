@@ -191,10 +191,20 @@ class InventationStudentSerializer(serializers.ModelSerializer):
 class ProposalSerializer(serializers.ModelSerializer):
     class Meta:
         model=ProposalRequestCourse
-        exclude=( 'status','user')
+        #fields=['course_request','user_proposal','status','response','created_at']
+        fields='__all__'
         extra_kwargs = {
-            'user':{'read_only':True},
+            'user_proposal':{'read_only':True},
+            'status':{
+                'read_only': True,},
+            'response':{
+                'read_only': True,
 
+            },
+            'Creator':{'read_only':True},
+            'created_at':{'read_only':True},
+
+            'course_request':{'read_only':True},
 
 
         }
@@ -216,56 +226,90 @@ class ProposalSerializer(serializers.ModelSerializer):
         # title=validated_attr.get('course').Title
         # notification=Notification.objects.create(user=user,sender=sender,title=title,description=description)
         #super().create(validated_attr)
-        
-        
     
-
-    
-    def update(self, instance, validated_attr):
-        old_status = instance.price
-        old_response=instance.message
-        instance.price=validated_attr['price']
-        instance.message=validated_attr['message']
-        instance.save()
-        changes = []
-        if old_status != instance.status:
-            changes.append({f'یپیشنهاد شما به {instance.price}تغییر یافته است'})
-        if old_response != instance.response:
-            changes.append(f'{instance.message}پیشنهاد شما یک پاسخ دارد:')
-        if changes:
-            description=f'پیشنهاد کلاس {instance.course.Title} به {instance.status} تغییر یافت. \n پاسخ پیشنهاد شما :{instance.response}'
-            user=instance.course.Creator
-            sender=instance.user
-            title=instance.course.Title
-            notification=Notification.objects.create(user=user,sender=sender,title=title,description=description)
-        return instance
+    # def update(self, instance, validated_attr):
+    #     old_status = instance.price
+    #     old_response=instance.message
+    #     instance.price=validated_attr['price']
+    #     instance.message=validated_attr['message']
+    #     instance.save()
+    #     changes = []
+    #     if old_status != instance.status:
+    #         changes.append({f'یپیشنهاد شما به {instance.price}تغییر یافته است'})
+    #     if old_response != instance.response:
+    #         changes.append(f'{instance.message}پیشنهاد شما یک پاسخ دارد:')
+    #     if changes:
+    #         description=f'پیشنهاد کلاس {instance.course.Title} به {instance.status} تغییر یافت. \n پاسخ پیشنهاد شما :{instance.response}'
+    #         user=instance.course.Creator
+    #         sender=instance.user
+    #         title=instance.course.Title
+    #         notification=Notification.objects.create(user=user,sender=sender,title=title,description=description)
+    #     return instance
 class propsalResponse(serializers.ModelSerializer):
     class Meta:
         model=ProposalRequestCourse
-        exclude=( 'message','price')
+        fields=['price','response','course_request','user_proposal','status']
+        # def is_agreement:
+        #     proposal=ProposalRequestCourse.objects.filter(course=)
         extra_kwargs = {
-            'user': {'read_only': True},
-            'message': {'read_only': True},
-            'price': {'read_only': True},
+            'user_proposal': {'read_only': True},
+            'course_request': {'read_only': True},
         }
     def update(self, instance, validated_attr):
         old_status = instance.status
         old_response=instance.response
+        # old_price=instance.price
         instance.status=validated_attr['status']
         instance.response=validated_attr['response']
+        # instance.price=validated_attr['price']
         instance.save()
         changes = []
         if old_status != instance.status:
             changes.append({f'یپیشنهاد شما به {instance.status}تغییر یافته است'})
+        # if old_price != instance.price:
+        #     changes.append({f'قیمت کلاس شما به {instance.price}تغییر یافت در صفحه شخصی تان میتوانید بپذیرید یا رد کنید'})
         if old_response != instance.response:
             changes.append(f'{instance.response}پیشنهاد شما یک پاسخ دارد:')
         if changes:
-            description=f'پیشنهاد کلاس {instance.course.Title} به {instance.status} تغییر یافت. \n پاسخ پیشنهاد شما :{instance.response}'
-            user=instance.user
-            sender=instance.course.Creator
-            title=instance.course.Title
+            description=f'پیشنهاد کلاس {instance.course_request.Title} به {instance.status} تغییر یافت. \n پاسخ پیشنهاد شما :{instance.response}'
+            user=instance.user_proposal
+            sender=instance.course_request.Creator
+            title=instance.course_request.Title
             notification=Notification.objects.create(user=user,sender=sender,title=title,description=description)
         return instance
+
+class RegisteringCourseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseCreate
+        fields = ['enrolled_students', 'Creator', 'CapacityCourse']
+        extra_kwargs = {
+            'Creator': {'read_only': True},
+            'CapacityCourse': {'read_only': True},
+            'enrolled_students': {'read_only': True},
+        }
+
+    def validate(self, attrs):
+        course = self.instance
+        user = self.context['request'].user
+        if not user or not user.is_authenticated:
+            raise ValidationError({'NotAuth':"ابتدا وارد حساب کاربری خود شوید."})
+        # آیا کاربر قبلاً ثبت‌نام کرده؟
+        if course.enrolled_students.filter(id=user.id).exists():
+            raise ValidationError({'registering':'شما قبلاً در این دوره ثبت‌نام کرده‌اید.'})
+
+        # بررسی ظرفیت
+        if course.enrolled_students.count() >= course.CapacityCourse:
+            raise ValidationError({'Capacity':"ظرفیت کلاس تکمیل شده است."})
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        user = self.context['request'].user
+        instance.enrolled_students.add(user)
+        return instance
+
+
+
 # class ListCourseSerializer(serializers.ModelSerializer):
 #     class Meta:
 #         model = ListMyClasses

@@ -4,19 +4,22 @@ from http.cookiejar import Cookie
 
 from django.core.serializers import get_serializer
 from django.shortcuts import render
+from pyasn1_modules.rfc3852 import id_data
 from rest_framework import viewsets, generics, status, mixins, request
 from rest_framework.authtoken.admin import User
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
 # Create your views here.
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken,OutstandingToken
 
 from . import permissions
-from .models import CustomUser
+from .models import CustomUser, AdditionalInformationUser, City, Province
 from .permissions import IsAdminUser, IsEmployeeUser
 from .serializer import UserSerializer, EmployeeSerializer, LoginSerializer, AgainSendVerificationSerializer, \
-    RecoverypaaswordSerializer
+    RecoverypaaswordSerializer, AdditionalInformationSerializer, ImageProfileSerializer, CitySerializer, \
+    ProvinceSerializer
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from django.urls import reverse
 import jwt
@@ -102,8 +105,7 @@ class SendAgainVerifiedView(APIView):
                             status=status.HTTP_201_CREATED)
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.exceptions import AuthenticationFailed
-
+from rest_framework.exceptions import AuthenticationFailed, NotFound
 
 
 class UserCurrentView(APIView):
@@ -142,8 +144,7 @@ class UserLoginView(APIView):
         # تولید توکن JWT
         # توکن ایجاد شده است که در کوکی ذخیره کردیم البته ما در خود کاما هم یک بخش برای ایجاد توکن دسترسی و توکن رفرش ایجاد کردیم اما چون خواستیم شخصی سازی کنیم اینجا داریم
                 refresh = RefreshToken.for_user(user)
-                print(refresh.access_token)
-                print(refresh)
+
                 access_token = str(refresh.access_token)
                 refresh_token = str(refresh)
                 response= Response({"access": str(refresh.access_token),"refresh": str(refresh),"user": {
@@ -177,6 +178,7 @@ class UserLoginView(APIView):
                 return Response({"error": "ایمیل یا رمز عبور اشتباه است."}, status=status.HTTP_401_UNAUTHORIZED)
         except Exception as e:
                 return Response({"error": f"مشکلی رخ داده: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class UserLogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -274,6 +276,8 @@ class EmployeeDashboardView(APIView):
         return Response({"message": "Welcome to Employee Dashboard"})
 
 
+
+
 #token refresh by coki
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -296,3 +300,77 @@ class CustomTokenRefreshView(TokenRefreshView):
             return response
         except Exception as e:
             return Response({"error": f"Invalid refresh token: {str(e)}"}, status=status.HTTP_401_UNAUTHORIZED)
+
+class UserProfileView(generics.GenericAPIView,
+                      mixins.RetrieveModelMixin,
+                      mixins.UpdateModelMixin):
+    permission_classes = [AllowAny]
+    serializer_class = AdditionalInformationSerializer
+
+    def get_queryset(self):
+        user = self.request.user.id
+        return AdditionalInformationUser.objects.filter(user=user)
+
+    def get_object(self):
+        return self.get_queryset().first()
+
+    def get(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if obj is not None:
+            return self.retrieve(request, *args, **kwargs)
+        return Response({'status': 'لطفا ابتدا وارد شوید'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    def put(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if obj is not None:
+            return self.update(request, *args, **kwargs)
+        return Response({'status': 'لطفا ابتدا وارد شوید'}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+class SelectImageProfileView(APIView):
+    serializer_class = ImageProfileSerializer
+    permission_classes = [IsAuthenticated]
+    def get_user_profile(self, request):
+        try:
+            user = CustomUser.objects.get(id=request.user.id)
+            return user
+        except CustomUser.DoesNotExist:
+            return None
+    def get(self, request):
+        user = self.get_user_profile(request)
+        if user:
+            data_user = AdditionalInformationUser.objects.filter(user=user).first()
+            serializer = self.serializer_class(data_user,many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response({'status':'لطفا ابتدا به سیستم وارد شوید'}, status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request):
+        user=self.get_user_profile(request)
+        if user:
+            data_user=AdditionalInformationUser.objects.filter(user=user).first()
+            serializer = self.serializer_class(data_user,data=request.data,)
+            if serializer.is_valid():
+                serializer.save()
+
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'status': 'لطفا ابتدا به سیستم وارد شوید'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ProvinceViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Province.objects.all()
+    serializer_class = ProvinceSerializer
+
+class CityViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = City.objects.all()
+    serializer_class = CitySerializer
+
+    @action(detail=False)
+    def by_province(self, request):
+        province_id = request.query_params.get('province_id')
+        if not province_id:
+            return Response({"detail": "province_id is required."}, status=400)
+        cities = City.objects.filter(province_id=province_id)
+        return Response(CitySerializer(cities, many=True).data)

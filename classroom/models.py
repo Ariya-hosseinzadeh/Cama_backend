@@ -90,18 +90,19 @@ class CourseCreate(models.Model):
 #کلاس هایی که درخواست کننده ایجاد میکند در صورت تایید از تالار انتظار حذف و به اینجا اضافه میشود
 class AgreementCourseRequest(models.Model):
     requestCourse = models.OneToOneField(CourseRequest, on_delete=models.CASCADE, related_name='requestCourse')
-    Time=models.DateTimeField(auto_now_add=True)
-    #CourseGroup=models.ForeignKey(GroupCourse, on_delete=models.CASCADE,related_name='course_group',null=True,blank=True)
-    ClassLink=models.CharField(max_length=500)
-    isHeld=models.BooleanField(default=False)
+    Time=models.DateTimeField()
+
+    #ClassLink=models.CharField(max_length=500,null=True,blank=True)
+    #isHeld=models.BooleanField(default=False)
     #isCompleted=models.BooleanField(default=False)#تعیین میکند تمام جلسات کلاس برگزار شده است
     average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
-    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teacher_invent")
-    Creator=models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="creator_classRequest")
+    teacher = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="teacher_invent")
+    student=models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="creator_classRequest")
     comments = GenericRelation(Comment)
 
     def save(self, *args, **kwargs):
-        self.enrolled_students=self.requestCourse.Creator
+        self.teacher=self.requestCourse.accepted_teacher
+        self.student=self.requestCourse.Creator
         super().save(*args, **kwargs)
     def update_average_rating(self):
         from django.contrib.contenttypes.models import ContentType
@@ -118,20 +119,23 @@ class AgreementCourseRequest(models.Model):
     class Meta:
         verbose_name_plural = 'Agreement Course Requests'
         ordering = ['-Time']
+
+
 #بقیه دانش آموزان باید توسط استاد اضافه شوند
 class AgreementCourseCreate(models.Model):
     createCourse = models.OneToOneField(CourseCreate, on_delete=models.CASCADE, related_name='teacher_create')
     Time = models.DateTimeField()
-    ClassLink = models.CharField(max_length=500)#api از وبینار که گرفتیم پر میشود
-    is_Held = models.BooleanField(default=False)
+    # ClassLink = models.CharField(max_length=500)#api از وبینار که گرفتیم پر میشود
+    # is_Held = models.BooleanField(default=False)
     average_rating = models.FloatField(default=0.0)  # میانگین امتیاز
-    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teachercourse")
-    students = models.ManyToManyField(User, related_name='students_attention', blank=True)
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="teacher_course")
+    students = models.ManyToManyField(User, related_name='students_attention', )
     comments = GenericRelation(Comment)
 
 
     def save(self, *args, **kwargs):
         self.teacher=self.createCourse.Creator
+        self .students=self.createCourse.enrolled_students
         super().save(*args, **kwargs)
     def update_average_rating(self):
         from django.contrib.contenttypes.models import ContentType
@@ -213,24 +217,28 @@ class ProposalRequestCourse(models.Model):
 
     )
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    course=models.ForeignKey(CourseRequest, on_delete=models.CASCADE)
+    user_proposal = models.ForeignKey(User, on_delete=models.CASCADE,default=1)
+    course_request=models.ForeignKey(CourseRequest, on_delete=models.CASCADE,related_name='proposals_Request')
+    Creator=models.ForeignKey(User,on_delete=models.CASCADE,related_name='Course_Creator')
     message = models.TextField()
     price=models.DecimalField(decimal_places=2, max_digits=10,)
     agreement_price=models.BooleanField(default=False)
     status = models.CharField(max_length=300,default='pending',choices=STATUS_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
     response = models.TextField(blank=True)
+
     def save(self, *args, **kwargs):
+        self.Creator=self.course_request.Creator
         if self.status == 'accepted':
-            ProposalRequestCourse.objects.filter(course=self.course).exclude(id=self.id).update(
+            ProposalRequestCourse.objects.filter(course_request=self.course_request).exclude(id=self.id).update(
                 status='rejected')
-            CourseInvitation.objects.filter(course=self.course).update(
+            CourseInvitation.objects.filter(course_request=self.course_request).update(
                 status='rejected'
             )
+
         super().save(*args, **kwargs)
     class Meta:
-        verbose_name_plural = 'Proposals'
+        verbose_name_plural = 'Proposals_Request'
         ordering = ['-created_at']
 class ProposalCreateCourse(models.Model):
     STATUS_CHOICES = (

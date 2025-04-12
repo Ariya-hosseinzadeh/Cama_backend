@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from user_custom.models import CustomUser, Skills
+from user_custom.models import CustomUser, Skills,Province,City
 from  user_custom.models import AdditionalInformationUser
 from user_custom.models import Employee
 
@@ -13,3 +13,5 @@ admin.site.register(CustomUser, CustomUserAdmin)
 admin.site.register(AdditionalInformationUser)
 admin.site.register(Employee)
 admin.site.register(Skills)
+admin.site.register(City)
+admin.site.register(Province)

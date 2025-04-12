@@ -2,7 +2,11 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from rest_framework.fields import ChoiceField
 from django.core.validators import RegexValidator
+
 import uuid
+
+from cama.upload_paths import profile_image_path
+
 # Create your models here.
 password_validator = RegexValidator(
     regex=r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
@@ -34,7 +38,20 @@ class Skills(models.Model):
    title=models.CharField(max_length=50)
    Mastery=models.CharField(max_length=50,choices=[('Beginner','beginner'),('Intermediate','intermediate'),('Proficient','proficient'),('Advanced','advanced'),('Expert','expert')],blank=False,)
 
+class Province(models.Model):
+    name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.name
+
+class City(models.Model):
+    name = models.CharField(max_length=100)
+    province = models.ForeignKey(Province, related_name='cities', on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
 # اطلاعات اضافی برای CustomUser
+from PIL import Image
 class AdditionalInformationUser(models.Model):
     DEGREE_CHOICES = [
         ('diploma', 'دیپلم'),
@@ -42,12 +59,29 @@ class AdditionalInformationUser(models.Model):
         ('master', 'کارشناسی ارشد '),
         ('ph.d', 'دکتری')
     ]
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='additional_info')
-    NationalCode = models.IntegerField(null=True, blank=True)
-    job = models.CharField(max_length=50, blank=True)
-    degree = models.CharField(max_length=10, choices=DEGREE_CHOICES, default='diploma', blank=False)
-    skills=models.ForeignKey(Skills, on_delete=models.CASCADE)
 
+
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='additional_info')
+    bio = models.TextField(blank=True, null=True)
+    profile_image = models.ImageField(upload_to=profile_image_path,null=True, blank=True)
+    gender=models.CharField(max_length=10,choices=[('male','مرد '),('female','زن'),],null=True,blank=True)
+    birth_date=models.DateField(blank=True,null=True)
+    province = models.ForeignKey(Province, on_delete=models.SET_NULL, null=True, blank=True)
+    city = models.ForeignKey(City, on_delete=models.SET_NULL, null=True, blank=True)
+    address_line = models.TextField(blank=True)
+    job = models.CharField(max_length=50, blank=True,null=True)
+    degree = models.CharField(max_length=10, choices=DEGREE_CHOICES, default='diploma', blank=False)
+    skills=models.ManyToManyField(Skills)
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.profile_image:
+            img_path = self.profile_image.path
+            img = Image.open(img_path)
+            img = img.convert("RGB")  # اگر فرمت PNG باشد، به RGB تبدیل شود
+            img.save(img_path, format="JPEG", quality=70, optimize=True)  # فشرده‌سازی
+
+    def __str__(self):
+        return self.user.username
 
 # مدل Employee
 class Employee(models.Model):

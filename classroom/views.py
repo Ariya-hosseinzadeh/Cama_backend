@@ -6,6 +6,7 @@ from django.dispatch import receiver
 from django.template.defaultfilters import title
 from django.template.defaulttags import querystring
 from pyexpat.errors import messages
+from rest_framework.exceptions import NotFound
 from rest_framework.generics import ListAPIView
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -170,85 +171,168 @@ class detailRequestCourse(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (AllowAny,)
     serializer_class = DetailCourseRequestSerializer
     queryset = CourseRequest.objects.all()
-#responseبرای پیشنهاد دهنده و گیرنده حتما مدیریت شود
-class CreateProposalCourseRequest(APIView):
+
+
+from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import status
+
+class ProposalCourseRequest(APIView):
     permission_classes = (AllowAny,)
     serializer_class = ProposalSerializer
-    def user_object(self,request):
-        user_custom = User.objects.filter(id=1).first()#آزمایشی بعدن تغییر کند
 
-        return user_custom
-    def course_object(self,id):
-        course = CourseRequest.objects.get(id=id)
-        return course
+    def user_object(self, request):
+        return request.user
 
-    def get(self,request,id):
-        try:
-            course = self.course_object(id)
-            proposal = ProposalRequestCourse.objects.filter(course=course)
-            serializer = self.serializer_class(proposal, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except CourseRequest.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-    def post(self,request,id:int):
-        serializer=self.serializer_class(data=request.data,context={'request': request})
-        try:
-            course = self.course_object(id)
-            user_custom = self.user_object(request)
+    def course_object(self, id):
+        return get_object_or_404(CourseRequest, id=id)
 
-            proposal = ProposalRequestCourse.objects.filter(course=course, user=user_custom).first()
-            if serializer.is_valid():
-                if (course.id == int(request.data['course'])):
-                    if proposal is None:
-                        serializer.save()
-                        return Response({'status': 'پیشنهاد شما با موفقیت ثبت شد'}, status=status.HTTP_200_OK)
-                    return Response({'status': ' شما قبلا برای این کلاس پیشنهاد داده اید برای اصلاح پیشنهادتان به صفحه پیشنهادات خود مراجعه کنید'},
-                                    status=status.HTTP_208_ALREADY_REPORTED)
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        except CourseRequest.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+    def get(self, request, id):
+        course = self.course_object(id)
+        proposal = ProposalRequestCourse.objects.filter(course_request=course)
+        serializer = self.serializer_class(proposal, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def post(self, request, id):
+        user_custom = self.user_object(request)
+        course = self.course_object(id)
 
+        if ProposalRequestCourse.objects.filter(course_request=course, user_proposal=user_custom.id).exists():
+            return Response({'status': ' شما قبلا برای این کلاس پیشنهاد داده‌اید...'}, status=status.HTTP_208_ALREADY_REPORTED)
 
+        data = request.data.copy()
+        data['user_proposal'] = user_custom.id
+        data['course_request'] = course.id
+        serializer = self.serializer_class(data=data, context={'request': request})
+
+        if serializer.is_valid():
+            print(data)
+            # if course.id == int(data['course_request']):
+                #serializer.save()
+            return Response({'status': 'پیشنهاد شما با موفقیت ثبت شد'}, status=status.HTTP_201_CREATED)
+        #return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ResponseProposalCourseRequest(APIView):
     permission_classes = (AllowAny,)
     serializer_class = propsalResponse
-    def get_proposal(self,id):
-        try:
-            proposal = ProposalRequestCourse.objects.get(id=id)
-            return proposal
-        except ProposalRequestCourse.DoesNotExist:
-            return Response({'status':'خطای ناشناخته'},status=status.HTTP_404_NOT_FOUND)
-    def get(self,request,id):
+
+    def get_proposal(self, id):
+        return get_object_or_404(ProposalRequestCourse, id=id)
+
+    def get(self, request, id):
         proposal = self.get_proposal(id)
-        serializer = self.serializer_class(proposal,many=False)
+        serializer = self.serializer_class(proposal, many=False)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def put(self,request,id):
+    def put(self, request, id):
         proposal = self.get_proposal(id)
-        serializer = self.serializer_class(proposal,data=request.data,context={'request': request})
-        print(request.data['course'])
-        print(type(request.data['course']),type(proposal.course.id),int(proposal.course.id))
-        if (int(request.data.get('course'))!=proposal.course.id):
+        serializer = self.serializer_class(proposal, data=request.data, context={'request': request})
 
-            return Response({'status':'دیتای غیر مجاز'},status=status.HTTP_403_FORBIDDEN)
         if serializer.is_valid():
+            print(serializer.validated_data)
             serializer.save()
-            if serializer.data['status']=='accepted':
-                course = CourseRequest.objects.get(id=serializer.data['course'])
-                try:
-                    courseAgreement = AgreementCourseRequest.objects.create(requestCourse=course, )
 
-                    return Response(serializer.data,{'status':'کلاس شما به لیست کلاس های رزروتان اضافه شد برای تعیین زمان و لینک کلاس به صفحه کلاس ها مراجعه کنید'}, status=status.HTTP_201_CREATED)
-                except:
-                    courseAgreement = AgreementCourseRequest.objects.filter(requestCourse=course, )
-                    if courseAgreement:
-                        return Response({'status': 'کلاس شما از قبل اضافه شده است'},status=status.HTTP_406_NOT_ACCEPTABLE)
-                    return Response(status=status.HTTP_400_BAD_REQUEST)
-            return Response(serializer.data,status=status.HTTP_200_OK)
+            if serializer.validated_data['status'] == 'accepted':
+                user_proposal = serializer.data['user_proposal']
+                # course = self.course_object(serializer.validated_data['course'])
+                print(serializer.validated_data)
+                # course = CourseRequest.objects.get(id=serializer.data['course'])
+                # course.Creator = user_proposal
+                # course.save()
+                #
+                # if AgreementCourseRequest.objects.filter(requestCourse=course).exists():
+                #     return Response({'status': 'کلاس شما از قبل اضافه شده است'}, status=status.HTTP_406_NOT_ACCEPTABLE)
+                #
+                # AgreementCourseRequest.objects.create(requestCourse=course)
+                # return Response({'status': 'کلاس شما به لیست کلاس‌های رزروتان اضافه شد...'}, status=status.HTTP_201_CREATED)
+
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#responseبرای پیشنهاد دهنده و گیرنده حتما مدیریت شود
+# class ProposalCourseRequest(APIView):
+#     permission_classes = (AllowAny,)
+#     serializer_class = ProposalSerializer
+#     def user_object(self,request):
+#
+#         user_custom = User.objects.filter(id=request.user).first()#آزمایشی بعدن تغییر کند
+#
+#         return user_custom
+#     def course_object(self,id):
+#         course = CourseRequest.objects.get(id=id)
+#         return course
+#
+#     def get(self,request,id):
+#         try:
+#             course = self.course_object(id)
+#             proposal = ProposalRequestCourse.objects.filter(course=course)
+#             serializer = self.serializer_class(proposal, many=True)
+#             return Response(serializer.data, status=status.HTTP_200_OK)
+#         except CourseRequest.DoesNotExist:
+#             return Response(status=status.HTTP_404_NOT_FOUND)
+#     def post(self,request,id:int):
+#         request.data['user_proposal']=self.user_object(request)
+#         serializer=self.serializer_class(data=request.data,context={'request': request})
+#         try:
+#             course = self.course_object(id)
+#             user_custom = self.user_object(request)
+#
+#             proposal = ProposalRequestCourse.objects.filter(course=course, user_proposal=user_custom).first()
+#             if serializer.is_valid():
+#                 if (course.id == int(request.data['course'])):
+#                     if proposal is None:
+#                         serializer.save()
+#                         return Response({'status': 'پیشنهاد شما با موفقیت ثبت شد'}, status=status.HTTP_200_OK)
+#                     return Response({'status': ' شما قبلا برای این کلاس پیشنهاد داده اید برای اصلاح پیشنهادتان به صفحه پیشنهادات خود مراجعه کنید'},
+#                                     status=status.HTTP_208_ALREADY_REPORTED)
+#             return Response(status=status.HTTP_400_BAD_REQUEST)
+#         except CourseRequest.DoesNotExist:
+#             return Response(status=status.HTTP_404_NOT_FOUND)
+#
+#
+#
+#
+#
+# class ResponseProposalCourseRequest(APIView):
+#     permission_classes = (AllowAny,)
+#     serializer_class = propsalResponse
+#     def get_proposal(self,id):
+#         try:
+#             proposal = ProposalRequestCourse.objects.get(id=id,)
+#             return proposal
+#         except ProposalRequestCourse.DoesNotExist:
+#             raise NotFound({'status': 'پروپوزال مورد نظر یافت نشد'})
+#     def get(self,request,id):
+#         proposal = self.get_proposal(id)
+#         serializer = self.serializer_class(proposal,many=False)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+#
+#     def put(self,request,id):
+#         proposal = self.get_proposal(id)
+#         serializer = self.serializer_class(proposal,data=request.data,context={'request': request})
+#
+#         if serializer.is_valid():
+#             serializer.save()
+#
+#             if serializer.data['status']=='accepted':
+#                 user_proposal=serializer.data['user_proposal']
+#                 course = CourseRequest.objects.get(id=serializer.data['course'])
+#                 course.Creator=user_proposal
+#                 course.save()
+#                 try:
+#                     courseAgreement = AgreementCourseRequest.objects.create(requestCourse=course, )
+#
+#                     return Response(serializer.data,{'status':'کلاس شما به لیست کلاس های رزروتان اضافه شد برای تعیین زمان و لینک کلاس به صفحه کلاس ها مراجعه کنید'}, status=status.HTTP_201_CREATED)
+#                 except:
+#                     courseAgreement = AgreementCourseRequest.objects.filter(requestCourse=course, )
+#                     if courseAgreement:
+#                         return Response({'status': 'کلاس شما از قبل اضافه شده است'},status=status.HTTP_406_NOT_ACCEPTABLE)
+#                     return Response(status=status.HTTP_400_BAD_REQUEST)
+#             return Response(serializer.data,status=status.HTTP_200_OK)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     # def put(self,request,id):
     #     course = self.course_object(id)
     #     user_custom=self.user_object(request)
@@ -344,6 +428,26 @@ class detailCreateCourse(generics.RetrieveAPIView,generics.UpdateAPIView,generic
     permission_classes = (AllowAny,)
     queryset = CourseCreate.objects
     serializer_class = DetailCourseCreateSerializer
+
+from .models import CourseCreate
+class RegisteringCourse(APIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = RegisteringCourseSerializer
+    def Course_object(self,id):
+        try:
+            course = CourseCreate.objects.get(id=id)
+            return course
+
+        except CourseCreate .DoesNotExist:
+
+            raise NotFound("Course not found")
+    def put(self,request,id):
+        course = self.Course_object(id)
+        serializer=self.serializer_class(course,data=request.data,context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data,status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # class ProposersRequest(APIView):

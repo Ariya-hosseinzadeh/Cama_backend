@@ -4,7 +4,7 @@ from django.db import models
 from rest_framework.authtoken.admin import User
 
 from Rating.models import Rating, Comment
-from Tags.models import Tag, Category
+from Tags.models import  Category
 from django.utils.text import slugify
 from mptt.models import MPTTModel, TreeForeignKey
 from PIL import Image
@@ -70,7 +70,7 @@ class CourseCreate(models.Model):
     is_active = models.BooleanField(default=True)
     price_course = models.FloatField(null=True,blank=True)
     level_course = models.IntegerField(default=1, choices=[(1, 'elementary'), (3, 'intermediate'), (5, 'advanced')])
-    enrolled_students=models.ManyToManyField(CustomUser,related_name='enrolled_students',blank=True,null=True)
+    enrolled_students=models.ManyToManyField(CustomUser,related_name='enrolled_students',blank=True,)
     teacher_rating = models.FloatField(default=0)
     def save(self, *args, **kwargs):
         """ فشرده‌سازی تصویر هنگام ذخیره """
@@ -188,7 +188,12 @@ class WaitingHall(models.Model):
 
 class CourseInvitation(models.Model):
     course_request = models.ForeignKey(CourseRequest, on_delete=models.CASCADE, related_name="invitations")
+    Course_name=models.CharField(max_length=200,db_index=True)
+    creator_name=models.CharField(max_length=200)
+    code_Creator=models.CharField(max_length=18,null=False,blank=False)
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, related_name="invitations")
+    teacher_name=models.CharField(max_length=200,null=False,blank=False)
+    code_teacher=models.CharField(max_length=18,null=False,blank=False)
     status = models.CharField(
         max_length=10,
         choices=[('pending', 'Pending'), ('accepted', 'Accepted'), ('rejected', 'Rejected')],
@@ -200,7 +205,12 @@ class CourseInvitation(models.Model):
     response=models.TextField(blank=True)
     def save(self,*args, **kwargs):
         """اگر این استاد دعوت را بپذیرد، دیگر دعوت‌ها رد شوند و استاد در کلاس ثبت شود."""
+        Course_name=self.course_request.Title
         creator=self.course_request.Creator
+        creator_name=self.course_request.Creator.username
+        code_Creator=self.course_request.Creator.codeUser
+        teacher_name=self.teacher.username
+        code_teacher=self.teacher.codeUser
         if(self.status== 'accepted'):
             self.course_request.accepted_teacher = self.teacher
             self.course_request.save()

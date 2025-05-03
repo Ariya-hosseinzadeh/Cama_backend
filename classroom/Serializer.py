@@ -53,22 +53,49 @@ class DetailCourseCreateSerializer(serializers.ModelSerializer):
             'CodeCreator':{'read_only':True},
             'username':{'read_only':True},
             'LinkAccess':{'read_only':True},
-            'Title':{'read_only':True},
-            'images':{'read_only':True},
+            'teacher_rating':{'read_only':True},
             'category':{'read_only':True},
+            'enrolled_students':{'read_only':True},
+            'images':{'read_only':True},
         }
 
+    def update(self, instance, validated_data):
+        user = self.context['request'].user
+        if user != instance.Creator:
+            raise ValidationError(
+                {'message_error': 'شما نمیتوانید بر روی کلاس دیگران تغییرات لحاظ کنید.\nاگر وارد نشدید وارد شوید'})
 
+        # سایر فیلدها به‌روزرسانی شوند
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
     def validate(self, attr):
         """ بررسی اندازه، فرمت و ابعاد تصویر قبل از ذخیره """
 
         # course=CourseRequest.objects.filter(Title=attr['Title'],description=attr['description'],is_active=True,CountClass=attr['CountClass'],category=attr['category'])
+        images = attr.get('images')
+        if images:
+            max_size = 5 * 1024 * 1024  # 5MB
+            if images.size > max_size:
+                raise ValidationError({"error_message":"حجم تصویر نباید بیشتر از ۵ مگابایت باشد."})
 
+            # بررسی فرمت تصویر
+            allowed_extensions = ["jpg", "jpeg", "png"]
+            ext = os.path.splitext(images.name)[1][1:].lower()
+            if ext not in allowed_extensions:
+                raise ValidationError({"error_message": "فرمت تصویر باید JPEG یا PNG باشد."})
+
+            # بررسی ابعاد تصویر
+            img = Image.open(images)
+            min_width, min_height = 300, 300
+            if img.width < min_width or img.height < min_height:
+                raise ValidationError({'error_message':f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد."})
         SuggestedTime = attr.get('SuggestedTime')
 
         now = timezone.now()
         if SuggestedTime < now:
-            raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
+            raise ValidationError({"error_message":f"زمان نمیتواند از زمان اکنون کمتر باشد"})
         return attr
 class DetailCourseRequestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -84,50 +111,61 @@ class DetailCourseRequestSerializer(serializers.ModelSerializer):
             'accepted_teacher':{'read_only':True},
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and request.method == 'PUT':
+            self.fields.pop('images', None)  # حذف فیلد از serializer
+
+
+    def update(self, instance, validated_data):
+        user = self.context['request'].user
+        if user != instance.Creator:
+            raise ValidationError(
+                {'message_error': 'شما نمیتوانید بر روی کلاس دیگران تغییرات لحاظ کنید.\nاگر وارد نشدید وارد شوید'})
+
+        # سایر فیلدها به‌روزرسانی شوند
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+    # def delete(self, instance, validated_data):
+    #     user = self.context['request'].user
+    #     if user != instance.Creator:
+    #         raise ValidationError({'error_message':'لطفا وارد شوید'})
+    #     instance.delete()در جنگو رست نمیتوان در سریالایز متد  حذف را تعریف کرد
 
     def validate(self, attr):
         """ بررسی اندازه، فرمت و ابعاد تصویر قبل از ذخیره """
 
-        # course=CourseRequest.objects.filter(Title=attr['Title'],description=attr['description'],is_active=True,CountClass=attr['CountClass'],category=attr['category'])
-
+        images = attr.get('images')
         SuggestedTime = attr.get('SuggestedTime')
+        if images:
+            max_size = 5 * 1024 * 1024  # 5MB
+            if images.size > max_size:
+                raise ValidationError({"error_message":"حجم تصویر نباید بیشتر از ۵ مگابایت باشد."})
+
+            # بررسی فرمت تصویر
+            allowed_extensions = ["jpg", "jpeg", "png"]
+            ext = os.path.splitext(images.name)[1][1:].lower()
+            if ext not in allowed_extensions:
+                raise ValidationError({"error_message": "فرمت تصویر باید JPEG یا PNG باشد."})
+
+            # بررسی ابعاد تصویر
+            img = Image.open(images)
+            min_width, min_height = 300, 300
+            if img.width < min_width or img.height < min_height:
+                raise ValidationError({'error_message':f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد."})
 
         now = timezone.now()
+        if SuggestedTime is None:
+            raise ValidationError({'error_message':'لطفا زمان را تعیین کنید'})
         if SuggestedTime < now:
-            raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
+            raise ValidationError({'error_message':"زمان نمیتواند از زمان اکنون کمتر باشد"})
+
+
         return attr
-    # def create(self, validated_attr):
-    #     request = self.context.get('request')
-    #     validated_attr['Creator'] = request.user
-    #     return super().create(validated_attr) در نسخه اصلی اضافه شود
-    # def validate(self, attr):
-    #     """ بررسی اندازه، فرمت و ابعاد تصویر قبل از ذخیره """
-    #     images = attr.get('images')
-    #     SuggestedTime = attr.get('SuggestedTime')
-    #     max_size = 5 * 1024 * 1024  # 5MB
-    #     if images.size > max_size:
-    #         raise ValidationError("حجم تصویر نباید بیشتر از ۵ مگابایت باشد.")
-    #
-    #     # بررسی فرمت تصویر
-    #     allowed_extensions = ["jpg", "jpeg", "png"]
-    #     ext = os.path.splitext(images.name)[1][1:].lower()
-    #     if ext not in allowed_extensions:
-    #         raise ValidationError("فرمت تصویر باید JPEG یا PNG باشد.")
-    #
-    #     # بررسی ابعاد تصویر
-    #     img = Image.open(images)
-    #     min_width, min_height = 300, 300
-    #     if img.width < min_width or img.height < min_height:
-    #         raise ValidationError(f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد.")
-    #
-    #     now = timezone.now()
-    #     if SuggestedTime < now:
-    #         raise ValidationError(f"زمان نمیتواند از زمان اکنون کمتر باشد")
-    #     return attr
-    # def create(self, validated_attr):
-    #     request = self.context.get('request')
-    #     validated_attr['Creator'] = request.user
-    #     return super().create(validated_attr) در نسخه اصلی اضافه شود
+
 
 
 class HallWaitingSerializer(serializers.ModelSerializer):
@@ -143,29 +181,40 @@ class InventiationTeacherSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'teacher':{
                 'read_only': True,
-            }#یوزر ایجاد کننده هم باید از رکوئست گرفته شود
+            }
        ,'response':{'read_only': True},
             'status':{'read_only': True},
+            'course_request':{'read_only': True},
+            'creator':{'read_only': True},
 
         }
+
     def validate(self, attr):
         try:
             teacher_code = attr.pop('teacher_code')  # مقدار را بردار و حذف کن
             teacher = CustomUser.objects.get(codeUser=teacher_code)
             attr['teacher'] = teacher
 
-            #creator = self.context.get('request').attr.get('creator')#user
-            #course=self.context.get('id')
         except CustomUser.DoesNotExist:
-            raise ValidationError('کد کاربری نادرست است')
-        course =attr.get('course_request')
+            raise ValidationError({'error_message':'کد کاربری نادرست است'})
+        user = self.context.get('request').user
+        if not user or not user.is_authenticated:
+            raise ValidationError({'error_message': 'Not Authenticated'})
+        attr['creator'] = user
+
+        course_id=self.context.get('id')
+        course = CourseRequest.objects.filter(id=course_id).first()
+        if not course:
+            raise ValidationError({'error_message': 'کلاس مورد نظر یافت نشد'})
+
         if CourseInvitation.objects.filter(course_request=course,teacher=teacher).exists():
-            raise ValidationError('شما قبلا از این استاد برای این کلاستان دعوت کرده اید')
-        print(CourseInvitation.objects.filter(course_request=course,teacher=teacher).exists())
-        print(attr)
+            raise ValidationError({'error_message':'شما قبلا از این استاد برای این کلاستان دعوت کرده اید'})
+
         return attr
 
     def create(self, validated_attr):
+        validated_attr['course_request']=CourseRequest.objects.filter(id=self.context.get('id')).first()
+
         return super().create(validated_attr)
 
 # این سریالایزر برای دانشجو است تا دعوت هایی که کرده است را تغییر دهد
@@ -186,12 +235,17 @@ class InventationStudentSerializer(serializers.ModelSerializer):
             },
             'response':{
                 'read_only': True,
-            }
+            },
+            'creator':{'read_only': True},
+            'code_teacher':{'read_only': True},
+            'code_Creator':{'read_only': True},
+            'Course_name':{'read_only': True},
+            'teacher_name':{'read_only': True},
+            'creator_name':{'read_only': True},
         }
 class ProposalSerializer(serializers.ModelSerializer):
     class Meta:
         model=ProposalRequestCourse
-        #fields=['course_request','user_proposal','status','response','created_at']
         fields='__all__'
         extra_kwargs = {
             'user_proposal':{'read_only':True},
@@ -384,4 +438,34 @@ class ResponseIventationTeacherSerializer(serializers.ModelSerializer):
             'description': {'read_only': True},
             'course_request': {'read_only': True},
             'creator': {'read_only': True},
+            'code_Creator': {'read_only': True},
+            'code_teacher': {'read_only': True},
+            'Course_name': {'read_only': True},
+            'creator_name': {'read_only': True},
+            'teacher_name': {'read_only': True},
+            'teacher':{'read_only': True},
+        }
+
+class myCourseCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model=CourseCreate
+        fields=['id','username','Creator','Title','description','images','category',]
+        extra_kwargs = {
+            'username': {'read_only': True},
+            'Creator': {'read_only': True},
+            'category': {'read_only': True},
+            'id': {'read_only': True},
+        }
+
+    def validate(self, attr):
+            pass
+class myCouseRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=CourseRequest
+        fields=['username','Creator','Title','description','category','images','id']
+        extra_kwargs = {
+            'username': {'read_only': True},
+            'Creator': {'read_only': True},
+            'id':{'read_only': True},
         }

@@ -40,62 +40,49 @@ class CreateRequestCourse(APIView):
 
 #تمامی دعوت هایی که از معلمان برای کلاس هایی که تا الان داشتیم را نمایش میگذارد این نمایش بصورت یک لیست است
 class myInventationRecive(generics.GenericAPIView,mixins.ListModelMixin):
-    permission_classes = (AllowAny,)
-    queryset=CourseInvitation.objects.filter(teacher=1)
+    permission_classes = (IsAuthenticated,)
+    def get_queryset(self):
+        try:
+            teacher = self.request.user
+            return CourseInvitation.objects.filter(teacher=teacher)
+        except CourseRequest.DoesNotExist:
+            raise NotFound
+
     serializer_class = InventiationTeacherSerializer
     def get(self, request:Request):
         return self.list(request)
 
 class myInventationSend(generics.GenericAPIView,mixins.ListModelMixin):
     permission_classes = (IsAuthenticated,)
-    queryset=CourseInvitation.objects.filter(creator=1)#change user
     serializer_class = InventiationTeacherSerializer
+    def get_queryset(self):
+        try:
+            creator=self.request.user
+            queryset = CourseInvitation.objects.filter(creator=creator)
+            return queryset
+        except CourseRequest.DoesNotExist:
+            raise NotFound
     def get(self, request:Request):
         return self.list(request)
 #با توجه به آی دعوت به جزِئیات آن دسترسی دارد
-class detalMyInventationRecive(APIView):
-    permission_classes = (AllowAny,)
+class detalMyInventationRecive(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = (IsAuthenticated,)
     serializer_class = ResponseIventationTeacherSerializer
-    def get(self, request:Request,id):
-        data=CourseInvitation.objects.filter(id=id)
-        serializers=self.serializer_class(data,many=True)
-        return Response(serializers.data or {'status':'دعوت مد نظر یافت نشد'}, status=status.HTTP_200_OK)
+    queryset = CourseInvitation.objects.all()
+    lookup_field = 'id'
 
-    def put(self, request:Request, id):
-        data=CourseInvitation.objects.get(id=id)
-        serializers=self.serializer_class(data,data=request.data)
-        if serializers.is_valid():
-            serializers.save()
-            return Response(serializers.data, status=status.HTTP_200_OK)
-        return Response(serializers.errors, status=status.HTTP_400_BAD_REQUEST)
+
 #دانش آموز با توجه به آی دی دعوت میتواند به دعوتش دسترسی داشته باشد آن را مدیریت یا حذف کند اما فیلد status در اینجا فقط باید قابل خواندن باشد
-class detailMyInventationSend(APIView):
-    permission_classes = (AllowAny,)
+class detailMyInventationSend(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = (IsAuthenticated,)
     serializer_class = InventationStudentSerializer
-    def get_object(self,id):
-        try:
-            return CourseInvitation.objects.filter(id=id)
-        except CourseInvitation.DoesNotExist:
-            return None
+    queryset = CourseInvitation.objects.all()
+    lookup_field = 'id'
 
-    def get(self, request:Request, id):
-        data=self.get_object(id)
-        serializers=self.serializer_class(data,many=True)
-        return Response(serializers.data or {'status':'دعوت مد نظر یافت نشد'}, status=status.HTTP_200_OK)
-    def put(self, request:Request, id):
-        data=self.get_object(id)
-        serializers=self.serializer_class(data,data=request.data)
-        if serializers.is_valid():
-            serializers.save()
-            return Response(serializers.data, status=status.HTTP_200_OK)
-        return Response(serializers.errors, status=status.HTTP_400_BAD_REQUEST)
-    def delete(self, request:Request, id):
-        data=CourseInvitation.objects.get(id=id)
-        data.delete()
 
 class InventationTecher(APIView):
-    permission_classes = (AllowAny,)
-    #permission_classes=(IsAuthenticated,)
+
+    permission_classes=(IsAuthenticated,)
     serializer_class = InventiationTeacherSerializer
     def post(self, request,id):
 
@@ -168,9 +155,15 @@ class HallWaiting(mixins.ListModelMixin,generics.GenericAPIView):
 #             return Response({'status': 'error in type'},status=status.HTTP_400_BAD_REQUEST)
 
 class detailRequestCourse(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
     serializer_class = DetailCourseRequestSerializer
     queryset = CourseRequest.objects.all()
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user != instance.Creator:
+            raise ValidationError({'error_message': 'شما مجاز به حذف این کلاس نیستید'})
+        return super().destroy(request, *args, **kwargs)
 
 
 from django.shortcuts import get_object_or_404
@@ -178,6 +171,19 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
+class ProposalCourseGenericApiView(generics.ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = ProposalSerializer
+    queryset = ProposalRequestCourse.objects.all()
+    # def get_queryset(self):
+    #     try:
+    #         user = self.request.user.id
+    #         return ProposalRequestCourse.objects.filter(user_proposal=user)
+    #     except ProposalRequestCourse.DoesNotExist:
+    #         raise ValidationError({'error_message':'Not Authorized'},status.HTTP_401_UNAUTHORIZED)
+
+
+
 
 class ProposalCourseRequest(APIView):
     permission_classes = (AllowAny,)
@@ -428,6 +434,20 @@ class detailCreateCourse(generics.RetrieveAPIView,generics.UpdateAPIView,generic
     permission_classes = (AllowAny,)
     queryset = CourseCreate.objects
     serializer_class = DetailCourseCreateSerializer
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if request.user != instance.Creator:
+            raise ValidationError({'error_message': 'شما مجاز به حذف این کلاس نیستید'})
+        return super().destroy(request, *args, **kwargs)
+    # def get_queryset(self,pk):
+    #     try:
+    #         course = CourseCreate.objects.get(id=pk)
+    #         return course
+    #     except CourseCreate.DoesNotExist:
+    #         return Response(status=status.HTTP_404_NOT_FOUND)// اشتباهات موجود در چت با هوش مصنوعی است
+
+
+
 
 from .models import CourseCreate
 class RegisteringCourse(APIView):
@@ -448,6 +468,32 @@ class RegisteringCourse(APIView):
             serializer.save()
             return Response(serializer.data,status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class myCorseRequestGenericApiView(generics.GenericAPIView,mixins.ListModelMixin):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = myCouseRequestSerializer
+    queryset = CourseRequest.objects.all()
+    def get_queryset(self):
+
+        Courses=CourseRequest.objects.filter(Creator=self.request.user.id)
+
+        return Courses
+    def get(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.get_queryset(), many=True)
+        return self.list(serializer,request, *args, **kwargs)
+
+class myCorseCreateGenericApiView(generics.GenericAPIView,mixins.ListModelMixin):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = myCourseCreateSerializer
+    queryset = CourseCreate.objects.all()
+    def get_queryset(self):
+
+        Courses=CourseCreate.objects.filter(Creator=self.request.user.id)
+
+        return Courses
+    def get(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=self.get_queryset(), many=True)
+        return self.list(serializer,request, *args, **kwargs)
 
 
 # class ProposersRequest(APIView):

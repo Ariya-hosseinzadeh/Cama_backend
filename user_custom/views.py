@@ -15,11 +15,11 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken,OutstandingToken
 
 from . import permissions
-from .models import CustomUser, AdditionalInformationUser, City, Province
+from .models import CustomUser, AdditionalInformationUser, City, Province, UserSkill, CareerHistory, Job, Skills
 from .permissions import IsAdminUser, IsEmployeeUser
 from .serializer import UserSerializer, EmployeeSerializer, LoginSerializer, AgainSendVerificationSerializer, \
     RecoverypaaswordSerializer, AdditionalInformationSerializer, ImageProfileSerializer, CitySerializer, \
-    ProvinceSerializer
+    ProvinceSerializer, UserSkillSerializer, CareerHistorySerializer, JobsSerializer, SkillsSerializer
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from django.urls import reverse
 import jwt
@@ -105,7 +105,7 @@ class SendAgainVerifiedView(APIView):
                             status=status.HTTP_201_CREATED)
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.exceptions import AuthenticationFailed, NotFound
+from rest_framework.exceptions import AuthenticationFailed, NotFound, ValidationError
 
 
 class UserCurrentView(APIView):
@@ -304,11 +304,11 @@ class CustomTokenRefreshView(TokenRefreshView):
 class UserProfileView(generics.GenericAPIView,
                       mixins.RetrieveModelMixin,
                       mixins.UpdateModelMixin):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     serializer_class = AdditionalInformationSerializer
 
     def get_queryset(self):
-        user = self.request.user.id
+        user = self.request.user
         return AdditionalInformationUser.objects.filter(user=user)
 
     def get_object(self):
@@ -340,8 +340,8 @@ class SelectImageProfileView(APIView):
     def get(self, request):
         user = self.get_user_profile(request)
         if user:
-            data_user = AdditionalInformationUser.objects.filter(user=user).first()
-            serializer = self.serializer_class(data_user,many=True)
+            data_user = AdditionalInformationUser.objects.get(user=user)
+            serializer = self.serializer_class(data_user)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response({'status':'لطفا ابتدا به سیستم وارد شوید'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -374,3 +374,89 @@ class CityViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "province_id is required."}, status=400)
         cities = City.objects.filter(province_id=province_id)
         return Response(CitySerializer(cities, many=True).data)
+
+class SkillsApiView(APIView):
+    permission_classes = [AllowAny]
+    serializer_class = SkillsSerializer
+    def get(self, request):
+        skills = Skills.objects.all()
+        serializer = self.serializer_class(skills, many=True)
+        return Response(serializer.data,status=status.HTTP_200_OK)
+class UserSkillViewset(viewsets.ModelViewSet):
+    queryset = UserSkill.objects.all()
+    serializer_class = UserSkillSerializer
+    permission_classes = [IsAuthenticated]  # فقط کاربران لاگین‌کرده
+    def get_queryset(self):
+        try:
+            additional_info = AdditionalInformationUser.objects.get(user=self.request.user)
+            return UserSkill.objects.filter(user=additional_info)
+        except AdditionalInformationUser.DoesNotExist:
+            raise NotFound("اطلاعات اضافی کاربر پیدا نشد.")
+    def create(self, request, *args, **kwargs):
+        additional_info = AdditionalInformationUser.objects.get(user=request.user)
+
+        skill = request.data.get('skill')
+        level = request.data.get('level')
+
+        existing = UserSkill.objects.filter(user=additional_info, skill=skill).first()
+        if existing:
+            existing.level = level
+            existing.save()
+            serializer = self.get_serializer(existing)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save(user=additional_info)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+    # def perform_create(self, serializer):
+    #     additional_info = AdditionalInformationUser.objects.get(user=self.request.user)
+    #     skill = serializer.validated_data['skill']
+    #     level = serializer.validated_data['level']
+    #
+    #     obj, created = UserSkill.objects.update_or_create(
+    #         user=additional_info,
+    #         skill=skill,
+    #         defaults={"level": level}
+    #     )
+
+        # این بخش رو اضافه کن تا response مناسبی برگرده
+        self.instance = obj
+    # def perform_create(self, serializer):
+    #     additional_info = AdditionalInformationUser.objects.get(user=self.request.user)
+    #     skill = serializer.validated_data['skill']
+    #     level = serializer.validated_data['level']
+    #
+    #     existing = UserSkill.objects.filter(user=additional_info, skill=skill).first()
+    #     if existing:
+    #         existing.level = level
+    #         existing.save()
+    #         self.instance = existing  # ✅ این خط خیلی مهمه
+    #     else:
+    #         serializer.save(user=additional_info)
+
+class CareerHistoryViewSet(viewsets.ModelViewSet):
+    queryset = CareerHistory.objects.all()
+    serializer_class = CareerHistorySerializer
+    permission_classes = [IsAuthenticated]
+    def get_queryset(self):
+        try:
+            additional_info = AdditionalInformationUser.objects.get(user=self.request.user.id)
+            return CareerHistory.objects.filter(user_data=additional_info)
+        except AdditionalInformationUser.DoesNotExist:
+            raise NotFound
+    def perform_create(self, serializer):
+        additional_info = AdditionalInformationUser.objects.get(user=self.request.user)
+        serializer.save(user_data=additional_info)
+
+class JobsGenericView(generics.GenericAPIView,mixins.ListModelMixin):
+    queryset = Job.objects.all()
+    serializer_class = JobsSerializer
+    def get(self,request):
+        return self.list(request)
+
+
+
+

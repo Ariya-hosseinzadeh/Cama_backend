@@ -3,12 +3,15 @@ from django.urls import path, include
 
 from Rating import admin
 from .  import views
-from .views import AdminDashboardView, EmployeeDashboardView, VerifyEmailView, ProvinceViewSet
+from .views import AdminDashboardView, EmployeeDashboardView, VerifyEmailView, ProvinceViewSet, UserSkillViewset, \
+    CareerHistory, CareerHistoryViewSet
 from rest_framework.routers import DefaultRouter
 from .views import CityViewSet
 router = DefaultRouter()
 router.register(r'cities', CityViewSet, basename='city')
 router.register(r'province', ProvinceViewSet, basename='province')
+router.register(r'user-skill', UserSkillViewset, basename='user_skill')
+router.register(r'career-history',CareerHistoryViewSet, basename='career_history')
 
 urlpatterns = [
 path('isadmin/', views.UserViewSet.as_view(), name='admin'),
@@ -27,5 +30,8 @@ path('admin-dashboard/', AdminDashboardView.as_view(), name='admin-dashboard'),
     path('coustom-log-out/', views.UserLogoutView.as_view(), name='custom-logout'),
     path('profile-information/',views.UserProfileView.as_view(), name='profile-information'),
     path('images-profile/',views.SelectImageProfileView.as_view(), name='images-profile'),
+    path('jobs/',views.JobsGenericView.as_view(), name='jobs'),
+    path('skills/',views.SkillsApiView.as_view(), name='skills'),
     path('',include(router.urls)),
+
 ]

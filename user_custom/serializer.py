@@ -7,7 +7,8 @@ from rest_framework import serializers, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from user_custom.models import CustomUser, AdditionalInformationUser, Skills, Employee, City, Province
+from user_custom.models import CustomUser, AdditionalInformationUser, Skills, Employee, City, Province, UserSkill, \
+    CareerHistory, Job
 import re
 
 class UserSerializer(serializers.ModelSerializer):
@@ -44,10 +45,10 @@ class RecoverypaaswordSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         email = attrs.get('email')
-        NationalCode = attrs.get('NationalCode')
-        user_custom = CustomUser.objects.filter(NationalCode=NationalCode, email=email).first()
+
+        user_custom = CustomUser.objects.filter(email=email).first()
         if not user_custom:
-            raise serializers.ValidationError('invalid NationalCode')
+            raise serializers.ValidationError({'error_message': 'invalid user'})
         return attrs
 
 class SignUpSerializer(serializers.ModelSerializer):
@@ -73,7 +74,10 @@ class AdditionalInformationSerializer(serializers.ModelSerializer):
     class Meta:
         model =AdditionalInformationUser
         fields ='__all__'
-        extra_kwargs = {"user": {"read_only": True}}
+
+        extra_kwargs = {"user": {"read_only": True},
+                        "profile_image":{"read_only": True}
+                        }
 
     def validate(self, attr):
 
@@ -94,30 +98,27 @@ class AdditionalInformationSerializer(serializers.ModelSerializer):
             if len(bio) != 0 and len(bio.strip()) < 30:
                 raise ValidationError({'status': 'بیوگرافی شما از 30 کاراکتر نمیتواند کمتر باشد'})
 
-        images = attr.get('profile_image')
-        if images is None:
-            raise ValidationError('عکسی بارگذاری نشده است')
-        max_size = 5 * 1024 * 1024  # 5MB
-        if images.size > max_size:
-            raise ValidationError({'images': "حجم تصویر نباید بیشتر از ۵ مگابایت باشد."})
-
-        # بررسی فرمت تصویر
-        allowed_extensions = ["jpg", "jpeg", "png"]
-        ext = os.path.splitext(images.name)[1][1:].lower()
-        if ext not in allowed_extensions:
-            raise ValidationError({'images': "فرمت تصویر باید JPEG یا PNG باشد."})
-            # بررسی ابعاد تصویر
-        img = Image.open(images)
-        min_width, min_height = 300, 300
-        if img.width < min_width or img.height < min_height:
-            raise ValidationError({'images': f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد."})
+        # images = attr.get('profile_image')
+        # if images is None:
+        #     raise ValidationError('عکسی بارگذاری نشده است')
+        # max_size = 5 * 1024 * 1024  # 5MB
+        # if images.size > max_size:
+        #     raise ValidationError({'images': "حجم تصویر نباید بیشتر از ۵ مگابایت باشد."})
+        #
+        # # بررسی فرمت تصویر
+        # allowed_extensions = ["jpg", "jpeg", "png"]
+        # ext = os.path.splitext(images.name)[1][1:].lower()
+        # if ext not in allowed_extensions:
+        #     raise ValidationError({'images': "فرمت تصویر باید JPEG یا PNG باشد."})
+        #     # بررسی ابعاد تصویر
+        # img = Image.open(images)
+        # min_width, min_height = 300, 300
+        # if img.width < min_width or img.height < min_height:
+        #     raise ValidationError({'images': f"ابعاد تصویر نباید کمتر از {min_width}x{min_height} پیکسل باشد."})
         return attr
 
 
-class SkillsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model =Skills
-        fields ='__all__'
+
 
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -156,4 +157,31 @@ class CitySerializer(serializers.ModelSerializer):
     class Meta:
         model=City
         fields ='__all__'
+class SkillsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Skills
+        fields=['name','id']
+class UserSkillSerializer(serializers.ModelSerializer):
+    title = serializers.SerializerMethodField()
 
+    class Meta:
+        model = UserSkill
+        fields = ['id', 'skill', 'level', 'user','title']
+        read_only_fields = ['user','title']
+    def get_title(self, obj):
+        return f"{obj.skill.name}: {obj.level}"
+
+class CareerHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CareerHistory
+        fields = ['id','user_data','job','company','date_start','date_end','NowBusy']
+
+class JobsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Job
+        fields ='__all__'
+    # def create(self, validated_data):
+    #     # user = self.context['request'].user
+    #     user=CustomUser.objects.get(id=1)
+    #     validated_data['user'] = user.additional_info
+    #     return super().create(validated_data)

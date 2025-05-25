@@ -50,7 +50,9 @@ INSTALLED_APPS = [
     'Dashboard',
     'chat',
     'django_extensions',
-
+    'Topics',
+    'FollowSystem',
+    'Notificated'
 
 ]
 # 'rest_framework_simplejwt.token_blacklist', در اینستال اپ برای استفاده از لاگ اوت دیفالت

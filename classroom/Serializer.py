@@ -260,7 +260,8 @@ class ProposalSerializer(serializers.ModelSerializer):
 
             'course_request':{'read_only':True},
 
-
+            'course_name':{'read_only':True},
+            'user_proposal_name':{'read_only':True},
         }
     # def create(self, validated_attr):
     #

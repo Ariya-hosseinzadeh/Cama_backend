@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from classroom.models import *
-from complaint_ticket.models import *
 from user_custom.models import *
 
 class MyRequestCourseSerializer(serializers.ModelSerializer):

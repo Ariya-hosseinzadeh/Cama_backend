@@ -6,7 +6,7 @@ from django.dispatch import receiver
 from django.template.defaultfilters import title
 from django.template.defaulttags import querystring
 from pyexpat.errors import messages
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.generics import ListAPIView
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -15,7 +15,7 @@ from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 
-from Dashboard.models import Notification
+from Notificated import *
 from user_custom.models import CustomUser
 from user_custom.views import UserSignup
 from .models import *
@@ -175,16 +175,37 @@ class ProposalCourseGenericApiView(generics.ListAPIView):
     permission_classes = (AllowAny,)
     serializer_class = ProposalSerializer
     queryset = ProposalRequestCourse.objects.all()
-    # def get_queryset(self):
-    #     try:
-    #         user = self.request.user.id
-    #         return ProposalRequestCourse.objects.filter(user_proposal=user)
-    #     except ProposalRequestCourse.DoesNotExist:
-    #         raise ValidationError({'error_message':'Not Authorized'},status.HTTP_401_UNAUTHORIZED)
+    def get_queryset(self):
+        user=self.request.user.id
+        return ProposalRequestCourse.objects.filter(user_proposal=user)
 
-
-
-
+class ProposalsSendGenericApiView(generics.ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = ProposalSerializer
+    queryset = ProposalRequestCourse.objects.all()
+    def get_queryset(self):
+        user=self.request.user.id
+        return ProposalRequestCourse.objects.filter(Creator=user)
+class ProposalReceiveGenericApiView(generics.RetrieveAPIView,generics.UpdateAPIView,generics.DestroyAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = ProposalSerializer
+    def get_queryset(self):
+        return ProposalRequestCourse.objects.filter(id=self.kwargs['pk'])
+    def get_object(self):
+        obj = super().get_object()
+        if obj.user_proposal != self.request.user:
+            raise PermissionDenied({'error_message':'شما حق دسترسی ندارید'})
+        return obj
+class MYProposalSendGenericApiView(generics.RetrieveAPIView,generics.UpdateAPIView,generics.DestroyAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = ProposalSerializer
+    def get_queryset(self):
+        return ProposalRequestCourse.objects.filter(id=self.kwargs['pk'])
+    def get_object(self):
+        obj = super().get_object()
+        if obj.Creator != self.request.user:
+            raise PermissionDenied({'error_message':'شما حق دسترسی ندارید'})
+        return obj
 class ProposalCourseRequest(APIView):
     permission_classes = (AllowAny,)
     serializer_class = ProposalSerializer

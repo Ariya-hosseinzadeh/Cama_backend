@@ -228,7 +228,9 @@ class ProposalRequestCourse(models.Model):
     )
 
     user_proposal = models.ForeignKey(User, on_delete=models.CASCADE,default=1)
+    user_proposal_name = models.CharField(max_length=200)
     course_request=models.ForeignKey(CourseRequest, on_delete=models.CASCADE,related_name='proposals_Request')
+    course_name=models.CharField(max_length=200,db_index=True)
     Creator=models.ForeignKey(User,on_delete=models.CASCADE,related_name='Course_Creator')
     message = models.TextField()
     price=models.DecimalField(decimal_places=2, max_digits=10,)
@@ -238,6 +240,8 @@ class ProposalRequestCourse(models.Model):
     response = models.TextField(blank=True)
 
     def save(self, *args, **kwargs):
+        self.course_name=self.course_request.Title
+        self.user_proposal_name=self.user_proposal.username
         self.Creator=self.course_request.Creator
         if self.status == 'accepted':
             ProposalRequestCourse.objects.filter(course_request=self.course_request).exclude(id=self.id).update(
